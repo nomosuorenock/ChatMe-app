@@ -123,7 +123,7 @@ export function AIChatScreen({ currentUser, dark, onBack, showToast }) {
               </div>
               {isUser && (
                 <div className="w-8 h-8 rounded-full bg-gray-300 dark:bg-gray-700 overflow-hidden shrink-0 shadow-sm mb-1">
-                  <img src={currentUser?.photo || "https://i.pravatar.cc/150?img=1"} alt="User" className="w-full h-full object-cover" />
+                  <img src={currentUser?.photo || `https://ui-avatars.com/api/?name=${encodeURIComponent(currentUser?.fullname || "Me")}&background=22c55e&color=fff&bold=true`} alt="User" className="w-full h-full object-cover" />
                 </div>
               )}
             </div>

@@ -1,0 +1,9 @@
+{
+	"appId": "com.chatme.app",
+	"appName": "ChatMe",
+	"webDir": "dist",
+	"server": {
+		"androidScheme": "https",
+		"cleartext": true
+	}
+}

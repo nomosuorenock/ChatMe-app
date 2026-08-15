@@ -127,7 +127,7 @@ export function GroupCreationScreen({ users, currentUser, editingGroup, initialS
                 <img src={u.photo} alt={u.fullname} className="w-10 h-10 rounded-full object-cover shadow-sm" />
                 <div className="flex-1 min-w-0">
                   <p className={`text-sm font-semibold truncate ${dark ? "text-white" : "text-gray-900"}`}>{u.fullname}</p>
-                  <p className="text-xs text-gray-400 truncate">{u.bio || u.email || "Online"}</p>
+                  <p className="text-xs text-gray-400 truncate">{u.bio || u.email || "Hey there! I am using ChatMe"}</p>
                 </div>
               </div>
             );

@@ -7,24 +7,50 @@ import {
   HelpCircle, User, Users, Check, CheckCheck, Plus, Image as ImageIcon,
   X, Mail, Eye, EyeOff, ChevronRight, Upload, Loader2, Shield, KeyRound,
   Clock, Mic, RefreshCw, Play, Pause, Square, Volume2, Film, Trash2, Sparkles,
+  BookUser, UserPlus, Share2, CloudUpload, MessageSquare
 } from "lucide-react";
 import { ContactsSelectionScreen } from "./components/ContactsSelectionScreen";
 import { GroupCreationScreen } from "./components/GroupCreationScreen";
 import { AIChatScreen } from "./components/AIChatScreen";
+import { StatusEditor } from "./components/StatusEditor";
+import { AddContactScreen } from "./components/AddContactScreen";
+import { PrivacyScreen } from "./components/PrivacyScreen";
+import { BackupRestoreScreen } from "./components/BackupRestoreScreen";
+import { ChatsSettingsScreen } from "./components/ChatsSettingsScreen";
+import { checkAndRunAutoBackup } from "./services/backupService";
+import { openPhoneDialer, shareContentViaAndroid } from "./services/permissionService";
 import { supabase } from "./lib/supabase";
 
 /* ------------------------------------------------------------------ */
-/*  Seed / mock data                                                   */
+/*  Avatar helper                                                      */
 /* ------------------------------------------------------------------ */
 
-const REPLIES = [
-  "Sounds good to me!",
-  "Haha true 😄",
-  "Let me check and get back to you",
-  "That works for me",
-  "No way, really?",
-  "On it 👍",
-];
+export function getDefaultAvatar(name?: string) {
+  const cleanName = (name || "User").trim();
+  const encodedName = encodeURIComponent(cleanName);
+  return `https://ui-avatars.com/api/?name=${encodedName}&background=22c55e&color=fff&bold=true`;
+}
+
+export const cleanupExpiredStatuses = async () => {
+  const now = new Date().toISOString();
+  const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  try {
+    await supabase.from('status_posts').delete().or(`expires_at.lt.${now},created_at.lt.${twentyFourHoursAgo}`);
+  } catch (e) {
+    console.log("Status posts cleanup error:", e);
+  }
+};
+
+export const filterFreshStatuses = (list: any[]) => {
+  const now = Date.now();
+  return list.filter((s: any) => {
+    const expiresAt = s.expires_at ? new Date(s.expires_at).getTime() : 0;
+    const createdAt = s.created_at ? new Date(s.created_at).getTime() : (expiresAt ? expiresAt - 86400000 : 0);
+    const is24hOld = createdAt > 0 && (now - createdAt >= 24 * 60 * 60 * 1000);
+    const isExpired = expiresAt > 0 && expiresAt <= now;
+    return !is24hOld && !isExpired;
+  });
+};
 
 /* ------------------------------------------------------------------ */
 /*  Small shared UI pieces                                             */
@@ -105,23 +131,24 @@ function SplashScreen({ dark }) {
   );
 }
 
-function SignUpScreen({ onSignUp, goSignIn, dark }) {
+function SignUpScreen({ onSignUp, goSignIn, dark }: any) {
   const [fullname, setFullname] = useState("");
   const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [photo, setPhoto] = useState(null);
   const [showPw, setShowPw] = useState(false);
-  const [errors, setErrors] = useState({});
-  const fileRef = useRef(null);
+  const [errors, setErrors] = useState<any>({});
+  const fileRef = useRef<HTMLInputElement>(null);
 
-  const handlePhoto = (e) => {
+  const handlePhoto = (e: any) => {
     const file = e.target.files?.[0];
     if (file) setPhoto(URL.createObjectURL(file));
   };
 
   const submit = () => {
-    const errs = {};
+    const errs: any = {};
     if (!fullname.trim()) errs.fullname = "Full name is required";
     if (!email.trim()) errs.email = "Email is required";
     else if (!/^\S+@\S+\.\S+$/.test(email)) errs.email = "Enter a valid email";
@@ -130,69 +157,72 @@ function SignUpScreen({ onSignUp, goSignIn, dark }) {
     if (confirm !== password) errs.confirm = "Passwords do not match";
     setErrors(errs);
     if (Object.keys(errs).length === 0) {
-      onSignUp({ fullname: fullname.trim(), email: email.trim(), password, photo, bio: "", phone: "" });
+      onSignUp({ fullname: fullname.trim(), email: email.trim(), phone: phone.trim(), password, photo, bio: "" });
     }
   };
 
   return (
-    <div className={`h-full overflow-y-auto px-6 py-8 ${dark ? "bg-gray-900" : "bg-white"}`}>
-      <div className="flex flex-col items-center mb-6">
-        <Logo size={56} />
-        <h1 className={`text-xl font-bold mt-4 ${dark ? "text-white" : "text-gray-900"}`}>Create Account</h1>
-        <p className="text-sm text-gray-400 mt-1">Join ChatMe today</p>
-      </div>
+    <div className={`h-full w-full overflow-y-auto px-6 py-8 flex flex-col items-center justify-center ${dark ? "bg-gray-900" : "bg-white"}`}>
+      <div className="w-full max-w-md my-auto">
+        <div className="flex flex-col items-center mb-6">
+          <Logo size={56} />
+          <h1 className={`text-xl font-bold mt-4 ${dark ? "text-white" : "text-gray-900"}`}>Create Account</h1>
+          <p className="text-sm text-gray-400 mt-1">Join ChatMe today</p>
+        </div>
 
-      <div className="flex flex-col items-center mb-5">
-        <button
-          onClick={() => fileRef.current?.click()}
-          className="w-20 h-20 rounded-xl bg-gray-100 border-2 border-dashed border-gray-300 flex items-center justify-center overflow-hidden"
-        >
-          {photo ? (
-            <img src={photo} alt="profile" className="w-full h-full object-cover" />
-          ) : (
-            <Upload size={22} className="text-gray-400" />
-          )}
-        </button>
-        <input type="file" accept="image/*" ref={fileRef} onChange={handlePhoto} className="hidden" />
-        <span className="text-xs text-green-600 font-medium mt-2">Upload Profile Photo</span>
-      </div>
+        <div className="flex flex-col items-center mb-5">
+          <button
+            onClick={() => fileRef.current?.click()}
+            className="w-20 h-20 rounded-xl bg-gray-100 border-2 border-dashed border-gray-300 flex items-center justify-center overflow-hidden"
+          >
+            {photo ? (
+              <img src={photo} alt="profile" className="w-full h-full object-cover" />
+            ) : (
+              <Upload size={22} className="text-gray-400" />
+            )}
+          </button>
+          <input type="file" accept="image/*" ref={fileRef} onChange={handlePhoto} className="hidden" />
+          <span className="text-xs text-green-600 font-medium mt-2">Upload Profile Photo</span>
+        </div>
 
-      <div className="flex flex-col gap-3">
-        <TextField icon={User} placeholder="Full Name" value={fullname} onChange={(e) => setFullname(e.target.value)} error={errors.fullname} dark={dark} />
-        <TextField icon={Mail} placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} error={errors.email} dark={dark} />
-        <TextField
-          icon={Lock}
-          type={showPw ? "text" : "password"}
-          placeholder="Password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          error={errors.password}
-          dark={dark}
-          rightElement={
-            <button type="button" onClick={() => setShowPw((s) => !s)}>
-              {showPw ? <EyeOff size={16} className="text-gray-400" /> : <Eye size={16} className="text-gray-400" />}
-            </button>
-          }
-        />
-        <TextField
-          icon={Lock}
-          type={showPw ? "text" : "password"}
-          placeholder="Confirm Password"
-          value={confirm}
-          onChange={(e) => setConfirm(e.target.value)}
-          error={errors.confirm}
-          dark={dark}
-        />
-      </div>
+        <div className="flex flex-col gap-3">
+          <TextField icon={User} placeholder="Full Name" value={fullname} onChange={(e) => setFullname(e.target.value)} error={errors.fullname} dark={dark} />
+          <TextField icon={Mail} placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} error={errors.email} dark={dark} />
+          <TextField icon={Phone} placeholder="Phone Number (e.g. +1 555-0199)" value={phone} onChange={(e) => setPhone(e.target.value)} dark={dark} />
+          <TextField
+            icon={Lock}
+            type={showPw ? "text" : "password"}
+            placeholder="Password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            error={errors.password}
+            dark={dark}
+            rightElement={
+              <button type="button" onClick={() => setShowPw((s) => !s)}>
+                {showPw ? <EyeOff size={16} className="text-gray-400" /> : <Eye size={16} className="text-gray-400" />}
+              </button>
+            }
+          />
+          <TextField
+            icon={Lock}
+            type={showPw ? "text" : "password"}
+            placeholder="Confirm Password"
+            value={confirm}
+            onChange={(e) => setConfirm(e.target.value)}
+            error={errors.confirm}
+            dark={dark}
+          />
+        </div>
 
-      <div className="mt-6">
-        <PrimaryButton onClick={submit} color="green">Sign Up</PrimaryButton>
-      </div>
+        <div className="mt-6">
+          <PrimaryButton onClick={submit} color="green">Sign Up</PrimaryButton>
+        </div>
 
-      <p className={`text-center text-sm mt-5 ${dark ? "text-gray-400" : "text-gray-500"}`}>
-        Already have an account?{" "}
-        <button onClick={goSignIn} className="text-blue-500 font-semibold">Sign In</button>
-      </p>
+        <p className={`text-center text-sm mt-5 ${dark ? "text-gray-400" : "text-gray-500"}`}>
+          Already have an account?{" "}
+          <button onClick={goSignIn} className="text-blue-500 font-semibold">Sign In</button>
+        </p>
+      </div>
     </div>
   );
 }
@@ -213,43 +243,45 @@ function SignInScreen({ onSignIn, goSignUp, goReset, dark }) {
   };
 
   return (
-    <div className={`h-full overflow-y-auto px-6 py-10 ${dark ? "bg-gray-900" : "bg-white"}`}>
-      <div className="flex flex-col items-center mb-8">
-        <Logo size={64} />
-        <h1 className={`text-xl font-bold mt-4 ${dark ? "text-white" : "text-gray-900"}`}>Welcome Back</h1>
-        <p className="text-sm text-gray-400 mt-1">Sign in to continue</p>
-      </div>
+    <div className={`h-full w-full overflow-y-auto px-6 py-10 flex flex-col items-center justify-center ${dark ? "bg-gray-900" : "bg-white"}`}>
+      <div className="w-full max-w-md my-auto">
+        <div className="flex flex-col items-center mb-8">
+          <Logo size={64} />
+          <h1 className={`text-xl font-bold mt-4 ${dark ? "text-white" : "text-gray-900"}`}>Welcome Back</h1>
+          <p className="text-sm text-gray-400 mt-1">Sign in to continue</p>
+        </div>
 
-      <div className="flex flex-col gap-3">
-        <TextField icon={Mail} placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} dark={dark} />
-        <TextField
-          icon={Lock}
-          type={showPw ? "text" : "password"}
-          placeholder="Password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          dark={dark}
-          rightElement={
-            <button type="button" onClick={() => setShowPw((s) => !s)}>
-              {showPw ? <EyeOff size={16} className="text-gray-400" /> : <Eye size={16} className="text-gray-400" />}
-            </button>
-          }
-        />
-        {error && <p className="text-xs text-red-500 pl-1">{error}</p>}
-      </div>
+        <div className="flex flex-col gap-3">
+          <TextField icon={Mail} placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} dark={dark} />
+          <TextField
+            icon={Lock}
+            type={showPw ? "text" : "password"}
+            placeholder="Password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            dark={dark}
+            rightElement={
+              <button type="button" onClick={() => setShowPw((s) => !s)}>
+                {showPw ? <EyeOff size={16} className="text-gray-400" /> : <Eye size={16} className="text-gray-400" />}
+              </button>
+            }
+          />
+          {error && <p className="text-xs text-red-500 pl-1">{error}</p>}
+        </div>
 
-      <div className="flex justify-end mt-2">
-        <button onClick={goReset} className="text-xs text-blue-500 font-medium">Forgot Password?</button>
-      </div>
+        <div className="flex justify-end mt-2">
+          <button onClick={goReset} className="text-xs text-blue-500 font-medium">Forgot Password?</button>
+        </div>
 
-      <div className="mt-6">
-        <PrimaryButton onClick={submit} color="blue">Sign In</PrimaryButton>
-      </div>
+        <div className="mt-6">
+          <PrimaryButton onClick={submit} color="blue">Sign In</PrimaryButton>
+        </div>
 
-      <p className={`text-center text-sm mt-5 ${dark ? "text-gray-400" : "text-gray-500"}`}>
-        Don't have an account?{" "}
-        <button onClick={goSignUp} className="text-green-600 font-semibold">Sign Up</button>
-      </p>
+        <p className={`text-center text-sm mt-5 ${dark ? "text-gray-400" : "text-gray-500"}`}>
+          Don't have an account?{" "}
+          <button onClick={goSignUp} className="text-green-600 font-semibold">Sign Up</button>
+        </p>
+      </div>
     </div>
   );
 }
@@ -266,32 +298,34 @@ function ResetPasswordScreen({ goSignIn, onReset, dark }) {
   };
 
   return (
-    <div className={`h-full overflow-y-auto px-6 py-10 ${dark ? "bg-gray-900" : "bg-white"}`}>
-      <div className="flex flex-col items-center mb-8">
-        <Logo size={56} />
-        <h1 className={`text-xl font-bold mt-4 ${dark ? "text-white" : "text-gray-900"}`}>Reset Password</h1>
-        <p className="text-sm text-gray-400 mt-1 text-center">Enter your email and we'll send you a reset link</p>
-      </div>
-
-      {sent ? (
-        <div className="text-center">
-          <div className="w-14 h-14 rounded-xl bg-green-100 flex items-center justify-center mx-auto mb-3">
-            <Check className="text-green-500" size={26} />
-          </div>
-          <p className={`text-sm ${dark ? "text-gray-300" : "text-gray-600"}`}>Reset link sent to {email}</p>
+    <div className={`h-full w-full overflow-y-auto px-6 py-10 flex flex-col items-center justify-center ${dark ? "bg-gray-900" : "bg-white"}`}>
+      <div className="w-full max-w-md my-auto">
+        <div className="flex flex-col items-center mb-8">
+          <Logo size={56} />
+          <h1 className={`text-xl font-bold mt-4 ${dark ? "text-white" : "text-gray-900"}`}>Reset Password</h1>
+          <p className="text-sm text-gray-400 mt-1 text-center">Enter your email and we'll send you a reset link</p>
         </div>
-      ) : (
-        <>
-          <TextField icon={Mail} placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} dark={dark} />
-          <div className="mt-6">
-            <PrimaryButton onClick={submit} color="green">Send Reset Link</PrimaryButton>
-          </div>
-        </>
-      )}
 
-      <p className="text-center text-sm mt-6">
-        <button onClick={goSignIn} className="text-blue-500 font-semibold">Back to Sign In</button>
-      </p>
+        {sent ? (
+          <div className="text-center">
+            <div className="w-14 h-14 rounded-xl bg-green-100 flex items-center justify-center mx-auto mb-3">
+              <Check className="text-green-500" size={26} />
+            </div>
+            <p className={`text-sm ${dark ? "text-gray-300" : "text-gray-600"}`}>Reset link sent to {email}</p>
+          </div>
+        ) : (
+          <>
+            <TextField icon={Mail} placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} dark={dark} />
+            <div className="mt-6">
+              <PrimaryButton onClick={submit} color="green">Send Reset Link</PrimaryButton>
+            </div>
+          </>
+        )}
+
+        <p className="text-center text-sm mt-6">
+          <button onClick={goSignIn} className="text-blue-500 font-semibold">Back to Sign In</button>
+        </p>
+      </div>
     </div>
   );
 }
@@ -300,27 +334,62 @@ function ResetPasswordScreen({ goSignIn, onReset, dark }) {
 /*  Bottom Nav + Top Bar                                                */
 /* ------------------------------------------------------------------ */
 
-function BottomNav({ active, onChange, dark }) {
-  const items = [
+function BottomNav({ active, onChange, dark }: { active: string; onChange: (key: string) => void; dark: boolean }) {
+  const leftItems = [
     { key: "chats", label: "Chats", icon: MessageCircle },
     { key: "updates", label: "Updates", icon: RefreshCw },
     { key: "contacts", label: "Contacts", icon: Users },
+  ];
+
+  const rightItems = [
     { key: "calls", label: "Calls", icon: Phone },
     { key: "ai", label: "Assistant", icon: Sparkles },
     { key: "profile", label: "Profile", icon: User },
   ];
+
   return (
-    <div className={`flex border-t ${dark ? "bg-gray-900 border-gray-800" : "bg-white border-gray-100"}`}>
-      {items.map(({ key, label, icon: Icon }) => {
+    <div
+      className={`w-full shrink-0 flex items-center justify-around border-t px-2 py-1 relative z-20 ${
+        dark ? "bg-gray-900 border-gray-800 text-white" : "bg-white border-gray-100 text-gray-900"
+      }`}
+      style={{ paddingBottom: "max(4px, env(safe-area-inset-bottom, 0px))" }}
+    >
+      {leftItems.map(({ key, label, icon: Icon }) => {
         const isActive = active === key;
         return (
           <button
             key={key}
             onClick={() => onChange(key)}
-            className="flex-1 flex flex-col items-center gap-1 py-2.5"
+            className="flex-1 flex flex-col items-center gap-0.5 py-1.5 transition hover:opacity-80"
           >
-            <Icon size={20} className={isActive ? "text-green-500" : "text-gray-400"} strokeWidth={isActive ? 2.5 : 2} />
-            <span className={`text-[10px] font-medium ${isActive ? "text-green-500" : "text-gray-400"}`}>{label}</span>
+            <Icon size={20} className={isActive ? "text-[#25D366]" : "text-gray-400"} strokeWidth={isActive ? 2.5 : 2} />
+            <span className={`text-[10px] font-medium ${isActive ? "text-[#25D366]" : "text-gray-400"}`}>{label}</span>
+          </button>
+        );
+      })}
+
+      {/* Center + Button */}
+      <div className="flex flex-col items-center justify-center -mt-5 px-1 z-10">
+        <button
+          onClick={() => onChange("add-contact")}
+          title="Add Contact / Device Contacts"
+          className="w-12 h-12 rounded-full bg-[#25D366] text-white flex items-center justify-center shadow-lg hover:bg-[#20bd5a] active:scale-95 transition-all border-4 border-white dark:border-gray-900"
+        >
+          <Plus size={26} strokeWidth={2.8} />
+        </button>
+        <span className={`text-[10px] font-bold mt-0.5 ${active === "add-contact" ? "text-[#25D366]" : "text-gray-400"}`}>Add</span>
+      </div>
+
+      {rightItems.map(({ key, label, icon: Icon }) => {
+        const isActive = active === key;
+        return (
+          <button
+            key={key}
+            onClick={() => onChange(key)}
+            className="flex-1 flex flex-col items-center gap-0.5 py-1.5 transition hover:opacity-80"
+          >
+            <Icon size={20} className={isActive ? "text-[#25D366]" : "text-gray-400"} strokeWidth={isActive ? 2.5 : 2} />
+            <span className={`text-[10px] font-medium ${isActive ? "text-[#25D366]" : "text-gray-400"}`}>{label}</span>
           </button>
         );
       })}
@@ -410,7 +479,7 @@ function StatusViewScreen({ status, currentUser, onBack, dark, onDelete, onReply
             <ArrowLeft size={24} />
           </button>
           <div className="w-10 h-10 rounded-full overflow-hidden bg-gray-700">
-            <img src={status.user_photo || "https://i.pravatar.cc/150?img=5"} alt="avatar" className="w-full h-full object-cover" />
+            <img src={status.user_photo || getDefaultAvatar(status.user_name)} alt="avatar" className="w-full h-full object-cover" />
           </div>
           <div>
             <p className="font-semibold text-sm">{status.user_name || "Contact"}</p>
@@ -431,11 +500,16 @@ function StatusViewScreen({ status, currentUser, onBack, dark, onDelete, onReply
 
       {/* Content Area */}
       <div className="flex-1 flex items-center justify-center p-4 relative">
+        {/* Background audio if present */}
+        {status.audio_url && (
+          <audio src={status.audio_url} autoPlay loop />
+        )}
+
         {status.media_type === "image" && (
-          <img src={status.media_url} alt="Status" className="max-h-[70vh] max-w-full object-contain rounded-lg" />
+          <img src={status.media_url} alt="Status" className="max-h-full max-w-full object-contain rounded-lg shadow-xl" />
         )}
         {status.media_type === "video" && (
-          <video src={status.media_url} controls autoPlay className="max-h-[70vh] max-w-full object-contain rounded-lg" />
+          <video src={status.media_url} controls autoPlay className="max-h-full max-w-full object-contain rounded-lg shadow-xl" />
         )}
         {status.media_type === "voice" && (
           <div className="flex flex-col items-center gap-4 bg-gray-900/80 p-8 rounded-2xl border border-gray-700 shadow-2xl">
@@ -452,6 +526,14 @@ function StatusViewScreen({ status, currentUser, onBack, dark, onDelete, onReply
           </div>
         )}
       </div>
+
+      {/* Music tag if present */}
+      {status.music_track && (
+        <div className="px-4 py-1.5 bg-black/70 text-green-400 text-xs font-semibold flex items-center justify-center gap-2 border-t border-gray-800">
+          <Sparkles size={14} className="animate-pulse" />
+          <span>{status.music_track}</span>
+        </div>
+      )}
 
       {/* Caption if any */}
       {status.media_type !== "text" && status.caption && (
@@ -518,50 +600,36 @@ function UpdatesScreen({ dark, currentUser, statuses, onAddStatus, onViewStatus,
   const [sheetOpen, setSheetOpen] = useState(false);
   const [voiceModalOpen, setVoiceModalOpen] = useState(false);
   const [textModalOpen, setTextModalOpen] = useState(false);
-  const [uploading, setUploading] = useState(false);
+  
+  // Selected media for StatusEditor
+  const [selectedEditorMedia, setSelectedEditorMedia] = useState<{
+    file: File;
+    objectUrl: string;
+    mediaType: "image" | "video";
+  } | null>(null);
 
   // File input refs
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
 
-  const handleFileSelected = async (e: any, mediaType: string) => {
+  const handleFileSelected = (e: any, defaultType: "image" | "video") => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    setUploading(true);
-    try {
-      let mediaUrl = URL.createObjectURL(file);
-      
-      // Try uploading to Supabase Storage bucket 'status-media'
-      try {
-        const fileName = `${Date.now()}_${file.name}`;
-        const { data, error } = await supabase.storage.from('status-media').upload(fileName, file);
-        if (!error && data) {
-          const { data: publicUrlData } = supabase.storage.from('status-media').getPublicUrl(fileName);
-          if (publicUrlData?.publicUrl) {
-            mediaUrl = publicUrlData.publicUrl;
-          }
-        }
-      } catch (err) {
-        console.log("Supabase storage upload fallback to local URL", err);
-      }
+    // Detect if video
+    const isVideo = file.type?.startsWith("video") || defaultType === "video";
+    const mediaType: "image" | "video" = isVideo ? "video" : "image";
 
-      await onAddStatus({
-        user_id: currentUser?.id || 1,
-        user_name: currentUser?.fullname || "Me",
-        user_photo: currentUser?.photo || "https://i.pravatar.cc/150?img=5",
-        media_type: mediaType,
-        media_url: mediaUrl,
-        caption: file.name,
-        created_at: new Date().toISOString(),
-        expires_at: new Date(Date.now() + 86400000).toISOString(),
-        viewers: []
-      });
-    } finally {
-      setUploading(false);
-      setSheetOpen(false);
-    }
+    const objectUrl = URL.createObjectURL(file);
+    setSelectedEditorMedia({
+      file,
+      objectUrl,
+      mediaType
+    });
+    setSheetOpen(false);
+
+    if (e.target) e.target.value = "";
   };
 
   return (
@@ -573,7 +641,7 @@ function UpdatesScreen({ dark, currentUser, statuses, onAddStatus, onViewStatus,
         <div className="flex items-center gap-4 mb-6 cursor-pointer" onClick={() => setSheetOpen(true)}>
           <div className="relative">
             <div className="w-14 h-14 bg-gray-300 rounded-full overflow-hidden border-2 border-green-500 p-0.5">
-              <img src={currentUser?.photo || "https://i.pravatar.cc/150?img=5"} alt="Me" className="w-full h-full object-cover rounded-full" />
+              <img src={currentUser?.photo || getDefaultAvatar(currentUser?.fullname)} alt="Me" className="w-full h-full object-cover rounded-full" />
             </div>
             <div className="absolute bottom-0 right-0 w-5 h-5 bg-green-500 rounded-full flex items-center justify-center text-white text-xs border-2 border-white dark:border-gray-950">
               <Plus size={12} />
@@ -593,7 +661,7 @@ function UpdatesScreen({ dark, currentUser, statuses, onAddStatus, onViewStatus,
             <div key={status.id} className="flex-shrink-0 flex flex-col items-center gap-1 cursor-pointer" onClick={() => onViewStatus(status)}>
               <div className="w-16 h-16 rounded-full border-2 border-green-500 p-0.5">
                 <div className="w-full h-full rounded-full overflow-hidden bg-gray-200">
-                  <img src={status.user_photo || "https://i.pravatar.cc/150?img=12"} alt={status.user_name} className="w-full h-full object-cover" />
+                  <img src={status.user_photo || getDefaultAvatar(status.user_name)} alt={status.user_name} className="w-full h-full object-cover" />
                 </div>
               </div>
               <p className="text-xs font-medium truncate w-16 text-center">{status.user_name?.split(' ')[0]}</p>
@@ -610,6 +678,30 @@ function UpdatesScreen({ dark, currentUser, statuses, onAddStatus, onViewStatus,
       <input type="file" ref={galleryInputRef} accept="image/*,video/*" className="hidden" onChange={(e) => handleFileSelected(e, 'image')} />
       <input type="file" ref={videoInputRef} accept="video/*" className="hidden" onChange={(e) => handleFileSelected(e, 'video')} />
 
+      {/* Full Screen Status Editor when media is picked */}
+      {selectedEditorMedia && (
+        <StatusEditor
+          file={selectedEditorMedia.file}
+          objectUrl={selectedEditorMedia.objectUrl}
+          mediaType={selectedEditorMedia.mediaType}
+          dark={dark}
+          currentUser={currentUser}
+          onClose={() => {
+            if (selectedEditorMedia.objectUrl) {
+              URL.revokeObjectURL(selectedEditorMedia.objectUrl);
+            }
+            setSelectedEditorMedia(null);
+          }}
+          onPostSuccess={async (newStatus) => {
+            await onAddStatus(newStatus);
+            if (selectedEditorMedia.objectUrl) {
+              URL.revokeObjectURL(selectedEditorMedia.objectUrl);
+            }
+            setSelectedEditorMedia(null);
+          }}
+        />
+      )}
+
       {/* Bottom Sheet for Status Options */}
       {sheetOpen && (
         <div className="absolute inset-0 bg-black/60 z-50 flex flex-col justify-end animate-fadeIn">
@@ -619,31 +711,24 @@ function UpdatesScreen({ dark, currentUser, statuses, onAddStatus, onViewStatus,
               <button onClick={() => setSheetOpen(false)}><X size={20} /></button>
             </div>
 
-            {uploading ? (
-              <div className="flex items-center justify-center py-12 gap-3">
-                <Loader2 className="animate-spin text-green-500" size={28} />
-                <span className="font-medium">Uploading status to Supabase...</span>
-              </div>
-            ) : (
-              <div className="grid grid-cols-4 gap-4 text-center">
-                <button onClick={() => cameraInputRef.current?.click()} className="flex flex-col items-center gap-2 p-3 rounded-xl bg-gray-100 dark:bg-gray-800 hover:bg-green-50 dark:hover:bg-green-900/30 transition">
-                  <div className="w-12 h-12 bg-green-500 rounded-full flex items-center justify-center text-white"><Camera size={22} /></div>
-                  <span className="text-xs font-medium">Camera</span>
-                </button>
-                <button onClick={() => galleryInputRef.current?.click()} className="flex flex-col items-center gap-2 p-3 rounded-xl bg-gray-100 dark:bg-gray-800 hover:bg-green-50 dark:hover:bg-green-900/30 transition">
-                  <div className="w-12 h-12 bg-blue-500 rounded-full flex items-center justify-center text-white"><ImageIcon size={22} /></div>
-                  <span className="text-xs font-medium">Gallery</span>
-                </button>
-                <button onClick={() => videoInputRef.current?.click()} className="flex flex-col items-center gap-2 p-3 rounded-xl bg-gray-100 dark:bg-gray-800 hover:bg-green-50 dark:hover:bg-green-900/30 transition">
-                  <div className="w-12 h-12 bg-purple-500 rounded-full flex items-center justify-center text-white"><Film size={22} /></div>
-                  <span className="text-xs font-medium">Video</span>
-                </button>
-                <button onClick={() => { setSheetOpen(false); setVoiceModalOpen(true); }} className="flex flex-col items-center gap-2 p-3 rounded-xl bg-gray-100 dark:bg-gray-800 hover:bg-green-50 dark:hover:bg-green-900/30 transition">
-                  <div className="w-12 h-12 bg-orange-500 rounded-full flex items-center justify-center text-white"><Mic size={22} /></div>
-                  <span className="text-xs font-medium">Voice</span>
-                </button>
-              </div>
-            )}
+            <div className="grid grid-cols-4 gap-4 text-center">
+              <button onClick={() => cameraInputRef.current?.click()} className="flex flex-col items-center gap-2 p-3 rounded-xl bg-gray-100 dark:bg-gray-800 hover:bg-green-50 dark:hover:bg-green-900/30 transition">
+                <div className="w-12 h-12 bg-green-500 rounded-full flex items-center justify-center text-white"><Camera size={22} /></div>
+                <span className="text-xs font-medium">Camera</span>
+              </button>
+              <button onClick={() => galleryInputRef.current?.click()} className="flex flex-col items-center gap-2 p-3 rounded-xl bg-gray-100 dark:bg-gray-800 hover:bg-green-50 dark:hover:bg-green-900/30 transition">
+                <div className="w-12 h-12 bg-blue-500 rounded-full flex items-center justify-center text-white"><ImageIcon size={22} /></div>
+                <span className="text-xs font-medium">Gallery</span>
+              </button>
+              <button onClick={() => videoInputRef.current?.click()} className="flex flex-col items-center gap-2 p-3 rounded-xl bg-gray-100 dark:bg-gray-800 hover:bg-green-50 dark:hover:bg-green-900/30 transition">
+                <div className="w-12 h-12 bg-purple-500 rounded-full flex items-center justify-center text-white"><Film size={22} /></div>
+                <span className="text-xs font-medium">Video</span>
+              </button>
+              <button onClick={() => { setSheetOpen(false); setVoiceModalOpen(true); }} className="flex flex-col items-center gap-2 p-3 rounded-xl bg-gray-100 dark:bg-gray-800 hover:bg-green-50 dark:hover:bg-green-900/30 transition">
+                <div className="w-12 h-12 bg-orange-500 rounded-full flex items-center justify-center text-white"><Mic size={22} /></div>
+                <span className="text-xs font-medium">Voice</span>
+              </button>
+            </div>
 
             <button onClick={() => { setSheetOpen(false); setTextModalOpen(true); }} className="w-full mt-4 py-3 bg-green-600 text-white font-medium rounded-xl shadow-md hover:bg-green-700 transition">
               Create Text Status
@@ -661,7 +746,7 @@ function UpdatesScreen({ dark, currentUser, statuses, onAddStatus, onViewStatus,
             await onAddStatus({
               user_id: currentUser?.id || 1,
               user_name: currentUser?.fullname || "Me",
-              user_photo: currentUser?.photo || "https://i.pravatar.cc/150?img=5",
+              user_photo: currentUser?.photo || getDefaultAvatar(currentUser?.fullname),
               media_type: "voice",
               media_url: audioUrl,
               caption: `Voice status (${duration}s)`,
@@ -684,7 +769,7 @@ function UpdatesScreen({ dark, currentUser, statuses, onAddStatus, onViewStatus,
             await onAddStatus({
               user_id: currentUser?.id || 1,
               user_name: currentUser?.fullname || "Me",
-              user_photo: currentUser?.photo || "https://i.pravatar.cc/150?img=5",
+              user_photo: currentUser?.photo || getDefaultAvatar(currentUser?.fullname),
               media_type: "text",
               media_url: text,
               caption: text,
@@ -885,31 +970,146 @@ function TextStatusModal({ currentUser, onClose, onSave, dark }) {
 
 
 /* ------------------------------------------------------------------ */
-/*  Home Screen                                                        */
+/*  Presence & Last Seen Helpers                                       */
 /* ------------------------------------------------------------------ */
 
-function formatLastSeen(isoStr) {
-  if (!isoStr) return "recently";
-  const date = new Date(isoStr);
-  if (isNaN(date.getTime())) return isoStr;
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffMins = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMs / 3600000);
-  const diffDays = Math.floor(diffMs / 86400000);
-
-  if (diffMins < 1) return "just now";
-  if (diffMins < 60) return `${diffMins}m ago`;
-  if (diffHours < 24) return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-  if (diffDays === 1) return `Yesterday at ${date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`;
-  return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+export function isUserOnline(user: any, onlinePresenceSet: Set<string>): boolean {
+  if (!user) return false;
+  if (user.isGroup) return false;
+  const userIdStr = String(user.id);
+  if (onlinePresenceSet && onlinePresenceSet.has(userIdStr)) {
+    return true;
+  }
+  if (user.online && (user.last_seen || user.lastSeenRaw)) {
+    const lastSeenTime = new Date(user.last_seen || user.lastSeenRaw).getTime();
+    const now = Date.now();
+    if (!isNaN(lastSeenTime) && (now - lastSeenTime) < 45000) {
+      return true;
+    }
+  }
+  return false;
 }
 
-function timeAgoLabel(ts) {
+export function formatLastSeen(isoStr: string | null | undefined): string {
+  if (!isoStr) return "Offline";
+  const date = new Date(isoStr);
+  if (isNaN(date.getTime())) return "Offline";
+
+  const now = new Date();
+  const isToday = date.toDateString() === now.toDateString();
+
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  const isYesterday = date.toDateString() === yesterday.toDateString();
+
+  const timeStr = date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+
+  if (isToday) {
+    return `Last seen today at ${timeStr}`;
+  } else if (isYesterday) {
+    return `Last seen yesterday at ${timeStr}`;
+  } else {
+    const dateStr = date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+    return `Last seen ${dateStr} at ${timeStr}`;
+  }
+}
+
+export function timeAgoLabel(ts: any): string {
+  if (!ts) return "";
+  if (typeof ts === "string" && !ts.includes("-") && !ts.includes("T")) return ts;
   return formatLastSeen(ts);
 }
 
-function HomeScreen({ users, currentUser, messagesData, unread, openChat, dark }) {
+/* ------------------------------------------------------------------ */
+/*  Wallpaper Helpers                                                 */
+/* ------------------------------------------------------------------ */
+
+export const BUILTIN_WALLPAPERS: Record<string, { name: string; class: string; previewBg: string }> = {
+  default: {
+    name: "Default Clean",
+    class: "bg-gray-50 dark:bg-gray-950",
+    previewBg: "bg-gray-100 dark:bg-gray-800"
+  },
+  doodle: {
+    name: "Classic WhatsApp Chat",
+    class: "bg-[#efeae2] dark:bg-[#0b141a]",
+    previewBg: "bg-[#efeae2] dark:bg-[#0b141a]"
+  },
+  emerald: {
+    name: "Emerald Mint",
+    class: "bg-emerald-50 dark:bg-emerald-950/90",
+    previewBg: "bg-emerald-200 dark:bg-emerald-900"
+  },
+  ocean: {
+    name: "Deep Ocean Blue",
+    class: "bg-sky-50 dark:bg-sky-950/90",
+    previewBg: "bg-sky-200 dark:bg-sky-900"
+  },
+  sunset: {
+    name: "Sunset Warmth",
+    class: "bg-amber-50 dark:bg-amber-950/90",
+    previewBg: "bg-amber-200 dark:bg-amber-900"
+  },
+  charcoal: {
+    name: "Dark Charcoal",
+    class: "bg-gray-900 text-white",
+    previewBg: "bg-gray-900 text-white"
+  },
+  purple: {
+    name: "Soft Lavender",
+    class: "bg-purple-50 dark:bg-purple-950/90",
+    previewBg: "bg-purple-200 dark:bg-purple-900"
+  }
+};
+
+export function compressWallpaperImage(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        const MAX_WIDTH = 1080;
+        const MAX_HEIGHT = 1920;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > MAX_WIDTH) {
+            height = Math.round((height * MAX_WIDTH) / width);
+            width = MAX_WIDTH;
+          }
+        } else {
+          if (height > MAX_HEIGHT) {
+            width = Math.round((width * MAX_HEIGHT) / height);
+            height = MAX_HEIGHT;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, width, height);
+          const dataUrl = canvas.toDataURL("image/jpeg", 0.82);
+          resolve(dataUrl);
+        } else {
+          resolve(e.target?.result as string);
+        }
+      };
+      img.onerror = () => resolve(e.target?.result as string);
+      img.src = e.target?.result as string;
+    };
+    reader.onerror = (err) => reject(err);
+    reader.readAsDataURL(file);
+  });
+}
+
+/* ------------------------------------------------------------------ */
+/*  Home Screen                                                        */
+/* ------------------------------------------------------------------ */
+
+function HomeScreen({ users, currentUser, messagesData, unread, openChat, dark, onlinePresenceSet }: any) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
 
@@ -939,44 +1139,47 @@ function HomeScreen({ users, currentUser, messagesData, unread, openChat, dark }
         {rows.length === 0 && (
           <p className="text-center text-sm text-gray-400 mt-10">No chats found</p>
         )}
-        {rows.map(({ user, last, unread: u }) => (
-          <button
-            key={user.id}
-            onClick={() => openChat(user.id)}
-            className={`w-full flex items-center gap-3 px-4 py-3 border-b ${dark ? "border-gray-800 active:bg-gray-800" : "border-gray-50 active:bg-gray-50"}`}
-          >
-            <div className="relative shrink-0">
-              <img src={user.photo} alt={user.fullname} className="w-12 h-12 rounded-xl object-cover" />
-              <AnimatePresence>
-                {user.online && (
-                  <motion.span
-                    initial={{ scale: 0, opacity: 0 }}
-                    animate={{ scale: 1, opacity: 1 }}
-                    exit={{ scale: 0, opacity: 0 }}
-                    transition={{ type: "spring", stiffness: 500, damping: 30 }}
-                    className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-green-500 border-2 border-white"
-                  />
-                )}
-              </AnimatePresence>
-            </div>
-            <div className="flex-1 min-w-0 text-left">
-              <div className="flex items-center justify-between">
-                <span className={`text-sm font-semibold truncate ${dark ? "text-white" : "text-gray-900"}`}>{user.fullname}</span>
-                <span className="text-[11px] text-gray-400 shrink-0 ml-2">{last ? timeAgoLabel(last.timestamp) : ""}</span>
+        {rows.map(({ user, last, unread: u }) => {
+          const online = isUserOnline(user, onlinePresenceSet);
+          return (
+            <button
+              key={user.id}
+              onClick={() => openChat(user.id)}
+              className={`w-full flex items-center gap-3 px-4 py-3 border-b ${dark ? "border-gray-800 active:bg-gray-800" : "border-gray-50 active:bg-gray-50"}`}
+            >
+              <div className="relative shrink-0">
+                <img src={user.photo} alt={user.fullname} className="w-12 h-12 rounded-xl object-cover" />
+                <AnimatePresence>
+                  {online && (
+                    <motion.span
+                      initial={{ scale: 0, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      exit={{ scale: 0, opacity: 0 }}
+                      transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                      className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-green-500 border-2 border-white"
+                    />
+                  )}
+                </AnimatePresence>
               </div>
-              <div className="flex items-center justify-between mt-0.5">
-                <span className={`text-xs truncate ${u > 0 ? (dark ? "text-gray-200" : "text-gray-700") : "text-gray-400"}`}>
-                  {last ? (last.senderId === currentUser.id ? "You: " : "") + last.text : "Say hi 👋"}
-                </span>
-                {u > 0 && (
-                  <span className="ml-2 shrink-0 min-w-[18px] h-[18px] px-1 rounded-full bg-green-500 text-white text-[10px] font-bold flex items-center justify-center">
-                    {u}
+              <div className="flex-1 min-w-0 text-left">
+                <div className="flex items-center justify-between">
+                  <span className={`text-sm font-semibold truncate ${dark ? "text-white" : "text-gray-900"}`}>{user.fullname}</span>
+                  <span className="text-[11px] text-gray-400 shrink-0 ml-2">{last ? timeAgoLabel(last.timestamp) : ""}</span>
+                </div>
+                <div className="flex items-center justify-between mt-0.5">
+                  <span className={`text-xs truncate ${u > 0 ? (dark ? "text-gray-200" : "text-gray-700") : "text-gray-400"}`}>
+                    {last ? (last.senderId === currentUser.id ? "You: " : "") + last.text : "Say hi 👋"}
                   </span>
-                )}
+                  {u > 0 && (
+                    <span className="ml-2 shrink-0 min-w-[18px] h-[18px] px-1 rounded-full bg-green-500 text-white text-[10px] font-bold flex items-center justify-center">
+                      {u}
+                    </span>
+                  )}
+                </div>
               </div>
-            </div>
-          </button>
-        ))}
+            </button>
+          );
+        })}
       </div>
     </div>
   );
@@ -993,18 +1196,23 @@ const WALLPAPERS = {
 /*  Chat Screen                                                        */
 /* ------------------------------------------------------------------ */
 
-function ChatScreen({ contact, currentUser, messages, onSend, onReact, onBack, typing, dark, wallpaper, onEditGroup }) {
+function ChatScreen({ contact, currentUser, messages, onSend, onReact, onBack, typing, dark, wallpaper, onEditGroup, onlinePresenceSet, onCall, showToast }: any) {
   const [text, setText] = useState("");
   const [isRecording, setIsRecording] = useState(false);
   const [startTime, setStartTime] = useState(0);
-  const endRef = useRef(null);
-  const [menuOpenForId, setMenuOpenForId] = useState(null);
-  const [lightbox, setLightbox] = useState(null);
+  const [showEmojis, setShowEmojis] = useState(false);
+  const endRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const [menuOpenForId, setMenuOpenForId] = useState<any>(null);
+  const [lightbox, setLightbox] = useState<string | null>(null);
   const [showGallery, setShowGallery] = useState(false);
-  const timerRef = useRef(null);
+  const timerRef = useRef<any>(null);
 
-  const isImageUrl = (text) => /\.(jpeg|jpg|gif|png)$/i.test(text);
-  const images = messages.filter(m => isImageUrl(m.text)).map(m => m.text);
+  const isImageUrl = (t: string) => /\.(jpeg|jpg|gif|png|webp)$/i.test(t) || (typeof t === 'string' && t.startsWith("data:image/"));
+  const isVideoUrl = (t: string) => /\.(mp4|webm|mov)$/i.test(t) || (typeof t === 'string' && t.startsWith("data:video/"));
+
+  const images = messages.filter((m: any) => isImageUrl(m.text)).map((m: any) => m.text);
 
   const startRecording = () => {
     setIsRecording(true);
@@ -1014,7 +1222,22 @@ function ChatScreen({ contact, currentUser, messages, onSend, onReact, onBack, t
   const stopRecording = () => {
     setIsRecording(false);
     const duration = Math.floor((Date.now() - startTime) / 1000);
-    onSend(`[VOICE:${duration}s]`);
+    onSend(`[VOICE:${duration > 0 ? duration : 1}s]`);
+  };
+
+  const handleMediaUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const dataUrl = event.target?.result as string;
+      if (dataUrl) {
+        onSend(dataUrl);
+      }
+    };
+    reader.readAsDataURL(file);
+    if (e.target) e.target.value = "";
   };
 
   useEffect(() => {
@@ -1025,9 +1248,10 @@ function ChatScreen({ contact, currentUser, messages, onSend, onReact, onBack, t
     if (!text.trim()) return;
     onSend(text.trim());
     setText("");
+    setShowEmojis(false);
   };
 
-  const startLongPress = (id) => {
+  const startLongPress = (id: any) => {
     timerRef.current = setTimeout(() => {
       setMenuOpenForId(id);
     }, 500);
@@ -1035,8 +1259,15 @@ function ChatScreen({ contact, currentUser, messages, onSend, onReact, onBack, t
   
   const clearTimer = () => clearTimeout(timerRef.current);
 
+  const online = isUserOnline(contact, onlinePresenceSet);
+  const isCustomWallpaper = wallpaper && (wallpaper.startsWith("data:") || wallpaper.startsWith("http://") || wallpaper.startsWith("https://") || wallpaper.startsWith("blob:"));
+  const wallpaperPreset = BUILTIN_WALLPAPERS[wallpaper] || BUILTIN_WALLPAPERS.default;
+
   return (
     <div className="flex flex-col h-full relative">
+      <input type="file" ref={fileInputRef} accept="image/*,video/*" className="hidden" onChange={handleMediaUpload} />
+      <input type="file" ref={cameraInputRef} accept="image/*" capture="environment" className="hidden" onChange={handleMediaUpload} />
+
       <div className={`flex items-center gap-3 px-3 py-3 border-b ${dark ? "bg-gray-900 border-gray-800" : "bg-white border-gray-100"}`}>
         <button onClick={onBack}>
           <ArrowLeft size={20} className={dark ? "text-white" : "text-gray-700"} />
@@ -1047,7 +1278,7 @@ function ChatScreen({ contact, currentUser, messages, onSend, onReact, onBack, t
         >
           <img src={contact.photo} alt={contact.fullname} className="w-9 h-9 rounded-xl object-cover" />
           <AnimatePresence>
-            {contact.online && !contact.isGroup && (
+            {online && !contact.isGroup && (
               <motion.span
                 initial={{ scale: 0, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
@@ -1064,7 +1295,13 @@ function ChatScreen({ contact, currentUser, messages, onSend, onReact, onBack, t
         >
           <p className={`text-sm font-semibold truncate ${dark ? "text-white" : "text-gray-900"}`}>{contact.fullname}</p>
           <p className="text-[11px] text-gray-400">
-            {typing ? <span className="text-green-500">{contact.fullname} is typing…</span> : contact.isGroup ? `${(contact.members || []).length + 1} members (Tap to manage)` : contact.online ? "Online" : `Last seen ${contact.lastSeen || "recently"}`}
+            {typing
+              ? <span className="text-green-500">{contact.fullname} is typing…</span>
+              : contact.isGroup
+              ? `${(contact.members || []).length + 1} members (Tap to manage)`
+              : online
+              ? "Online"
+              : formatLastSeen(contact.last_seen || contact.lastSeenRaw)}
           </p>
         </div>
         {contact.isGroup && (
@@ -1076,61 +1313,104 @@ function ChatScreen({ contact, currentUser, messages, onSend, onReact, onBack, t
             <Users size={18} />
           </button>
         )}
-        <Phone size={18} className="text-blue-500" />
-        <Video size={18} className="text-blue-500" />
-        <button onClick={() => setShowGallery(true)}><ImageIcon size={18} className={dark ? "text-white" : "text-gray-700"} /></button>
+        <button
+          onClick={() => {
+            if (contact?.phone) {
+              openPhoneDialer(contact.phone);
+            } else if (onCall) {
+              onCall(contact, "voice");
+            } else if (showToast) {
+              showToast(`Calling ${contact?.fullname || 'contact'}…`);
+            }
+          }}
+          className="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition"
+          title="Call"
+        >
+          <Phone size={18} className="text-[#25D366]" />
+        </button>
+        <button
+          onClick={() => {
+            if (onCall) {
+              onCall(contact, "video");
+            } else if (showToast) {
+              showToast(`Starting video call with ${contact?.fullname || 'contact'}…`);
+            }
+          }}
+          className="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition"
+          title="Video Call"
+        >
+          <Video size={18} className="text-blue-500" />
+        </button>
+        <button onClick={() => setShowGallery(true)} className="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition" title="View Gallery">
+          <ImageIcon size={18} className={dark ? "text-white" : "text-gray-700"} />
+        </button>
       </div>
 
-      <div className={`flex-1 overflow-y-auto px-3 py-3 flex flex-col gap-2 ${WALLPAPERS[wallpaper] || WALLPAPERS.default}`}>
-        {messages.map((m) => {
-          const mine = m.senderId === currentUser.id;
-          return (
-            <div key={m.id} className={`flex flex-col ${mine ? "items-end" : "items-start"}`}>
-              <div
-                className={`max-w-[75%] rounded-xl px-3 py-2 text-sm relative ${
-                  mine ? "bg-green-500 text-white rounded-br-sm" : dark ? "bg-gray-800 text-gray-100 rounded-bl-sm" : "bg-white text-gray-800 rounded-bl-sm shadow-sm"
-                }`}
-                onMouseDown={() => startLongPress(m.id)}
-                onMouseUp={clearTimer}
-                onMouseLeave={clearTimer}
-                onTouchStart={() => startLongPress(m.id)}
-                onTouchEnd={clearTimer}
-              >
-                {isImageUrl(m.text) ? (
-                  <img src={m.text} alt="chat" className="max-w-xs rounded-lg cursor-pointer" onClick={() => setLightbox(m.text)} />
-                ) : m.text.startsWith("[VOICE:") ? (
-                  <div className="flex items-center gap-2">
-                    <Mic size={16} />
-                    <span>{m.text.replace("[VOICE:", "").replace("]", "")}</span>
-                  </div>
-                ) : (
-                  m.text
-                )}
-                {m.reaction && <span className="absolute -bottom-2 -right-1 text-xs bg-white dark:bg-gray-800 px-0.5 rounded-full border shadow-sm">{m.reaction}</span>}
-              </div>
-              <div className="flex items-center gap-1 mt-0.5 px-1">
-                <span className="text-[10px] text-gray-400">{m.timestamp}</span>
-                 {mine && (
-                   m.status === "read" ? <CheckCheck size={12} className="text-blue-500" /> :
-                   m.status === "delivered" ? <CheckCheck size={12} className="text-gray-400" /> :
-                   <Check size={12} className="text-gray-400" />
-                 )}
-              </div>
-            </div>
-          );
-        })}
-        {typing && (
-          <div className="flex items-start">
-            <div className={`rounded-xl rounded-bl-sm px-3 py-2 ${dark ? "bg-gray-800" : "bg-white shadow-sm"}`}>
-              <div className="flex gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: "0ms" }} />
-                <span className="w-1.5 h-1.5 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: "150ms" }} />
-                <span className="w-1.5 h-1.5 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: "300ms" }} />
-              </div>
-            </div>
-          </div>
+      <div 
+        className={`flex-1 overflow-y-auto px-3 py-3 flex flex-col gap-2 relative ${!isCustomWallpaper ? (wallpaperPreset?.class || WALLPAPERS[wallpaper] || WALLPAPERS.default) : ""}`}
+        style={isCustomWallpaper ? {
+          backgroundImage: `url(${wallpaper})`,
+          backgroundSize: "cover",
+          backgroundPosition: "center",
+          backgroundRepeat: "no-repeat"
+        } : undefined}
+      >
+        {isCustomWallpaper && (
+          <div className="absolute inset-0 bg-black/15 dark:bg-black/40 pointer-events-none z-0" />
         )}
-        <div ref={endRef} />
+        <div className="relative z-10 flex flex-col gap-2 flex-1">
+          {messages.map((m: any) => {
+            const mine = m.senderId === currentUser.id;
+            return (
+              <div key={m.id} className={`flex flex-col ${mine ? "items-end" : "items-start"}`}>
+                <div
+                  className={`max-w-[75%] rounded-xl px-3 py-2 text-sm relative ${
+                    mine ? "bg-green-500 text-white rounded-br-sm" : dark ? "bg-gray-800 text-gray-100 rounded-bl-sm" : "bg-white text-gray-800 rounded-bl-sm shadow-sm"
+                  }`}
+                  onMouseDown={() => startLongPress(m.id)}
+                  onMouseUp={clearTimer}
+                  onMouseLeave={clearTimer}
+                  onTouchStart={() => startLongPress(m.id)}
+                  onTouchEnd={clearTimer}
+                >
+                  {isImageUrl(m.text) ? (
+                    <img src={m.text} alt="chat" className="max-w-xs rounded-lg cursor-pointer" onClick={() => setLightbox(m.text)} />
+                  ) : isVideoUrl(m.text) ? (
+                    <video src={m.text} controls className="max-w-xs rounded-lg" />
+                  ) : m.text.startsWith("[VOICE:") ? (
+                    <div className="flex items-center gap-2">
+                      <Mic size={16} />
+                      <span>{m.text.replace("[VOICE:", "").replace("]", "")}</span>
+                    </div>
+                  ) : (
+                    m.text
+                  )}
+                  {m.reaction && <span className="absolute -bottom-2 -right-1 text-xs bg-white dark:bg-gray-800 px-0.5 rounded-full border shadow-sm">{m.reaction}</span>}
+                </div>
+                <div className="flex items-center gap-1 mt-0.5 px-1">
+                  <span className="text-[10px] text-gray-400">{m.timestamp}</span>
+                   {mine && (
+                     m.status === "read" ? <CheckCheck size={12} className="text-blue-500" /> :
+                     m.status === "delivered" ? <CheckCheck size={12} className="text-gray-400" /> :
+                     <Check size={12} className="text-gray-400" />
+                   )}
+                </div>
+              </div>
+            );
+          })}
+          {typing && (
+            <div className="flex items-start">
+              <div className={`rounded-xl rounded-bl-sm px-3 py-2 ${dark ? "bg-gray-800" : "bg-white shadow-sm"}`}>
+                <div className="flex gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: "0ms" }} />
+                  <span className="w-1.5 h-1.5 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: "150ms" }} />
+                  <span className="w-1.5 h-1.5 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: "300ms" }} />
+                </div>
+              </div>
+            </div>
+          )}
+          <div ref={endRef} />
+        </div>
       </div>
 
       {menuOpenForId && (
@@ -1140,6 +1420,16 @@ function ChatScreen({ contact, currentUser, messages, onSend, onReact, onBack, t
               <button key={emoji} onClick={() => { onReact(menuOpenForId, emoji); setMenuOpenForId(null); }} className="text-xl hover:scale-125 transition-transform">{emoji}</button>
             ))}
           </div>
+        </div>
+      )}
+
+      {showEmojis && (
+        <div className={`px-3 py-2 border-t flex flex-wrap gap-2 z-20 ${dark ? "bg-gray-900 border-gray-800" : "bg-white border-gray-100"}`}>
+          {["😊", "😂", "❤️", "👍", "🔥", "🎉", "🙏", "😍", "🙌", "😎"].map((em) => (
+            <button key={em} onClick={() => { setText(t => t + em); }} className="text-lg hover:scale-125 transition">
+              {em}
+            </button>
+          ))}
         </div>
       )}
 
@@ -1156,15 +1446,15 @@ function ChatScreen({ contact, currentUser, messages, onSend, onReact, onBack, t
             <button onClick={() => setShowGallery(false)} className="text-green-500">Close</button>
           </div>
           <div className="grid grid-cols-3 gap-2 overflow-y-auto">
-            {images.map(src => <img src={src} key={src} className="w-full aspect-square object-cover rounded-lg" onClick={() => setLightbox(src)} />)}
+            {images.map((src: string) => <img src={src} key={src} className="w-full aspect-square object-cover rounded-lg" onClick={() => setLightbox(src)} />)}
           </div>
         </div>
       )}
 
       <div className={`flex items-center gap-2 px-3 py-2.5 border-t ${dark ? "bg-gray-900 border-gray-800" : "bg-white border-gray-100"}`}>
-        <button><Smile size={20} className="text-gray-400" /></button>
-        <button><Paperclip size={20} className="text-gray-400" /></button>
-        <button><Camera size={20} className="text-gray-400" /></button>
+        <button onClick={() => setShowEmojis(s => !s)}><Smile size={20} className="text-gray-400" /></button>
+        <button onClick={() => fileInputRef.current?.click()}><Paperclip size={20} className="text-gray-400" /></button>
+        <button onClick={() => cameraInputRef.current?.click()}><Camera size={20} className="text-gray-400" /></button>
         <button onMouseDown={startRecording} onMouseUp={stopRecording} onMouseLeave={stopRecording} onTouchStart={startRecording} onTouchEnd={stopRecording} className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${isRecording ? "bg-red-500" : "bg-gray-200"}`}>
           <Mic size={16} className={isRecording ? "text-white" : "text-gray-600"} />
         </button>
@@ -1184,43 +1474,274 @@ function ChatScreen({ contact, currentUser, messages, onSend, onReact, onBack, t
 }
 
 /* ------------------------------------------------------------------ */
+/*  Phone Normalization & Matching Helpers                             */
+/* ------------------------------------------------------------------ */
+
+export interface DeviceContact {
+  id: string;
+  name: string;
+  phone: string;
+  email?: string;
+  photo?: string;
+}
+
+export function normalizePhone(phone: string | null | undefined): string {
+  if (!phone) return "";
+  let cleaned = phone.replace(/[\s\-\(\)\.]/g, "");
+  if (cleaned.startsWith("00")) {
+    cleaned = "+" + cleaned.slice(2);
+  }
+  return cleaned;
+}
+
+export function isPhoneMatch(p1: string | null | undefined, p2: string | null | undefined): boolean {
+  if (!p1 || !p2) return false;
+  const norm1 = normalizePhone(p1);
+  const norm2 = normalizePhone(p2);
+  if (!norm1 || !norm2) return false;
+  if (norm1 === norm2) return true;
+
+  const digits1 = norm1.replace(/\D/g, "");
+  const digits2 = norm2.replace(/\D/g, "");
+  if (digits1.length >= 7 && digits2.length >= 7) {
+    const minLen = Math.min(10, digits1.length, digits2.length);
+    return digits1.slice(-minLen) === digits2.slice(-minLen);
+  }
+  return false;
+}
+
+/* ------------------------------------------------------------------ */
 /*  Contacts Screen                                                    */
 /* ------------------------------------------------------------------ */
 
-function ContactsScreen({ users, currentUser, openChat, dark, setScreen, setEditingGroup, onSyncGoogleContacts }) {
+function ContactsScreen({
+  users,
+  currentUser,
+  deviceContacts,
+  contactsPermissionGranted,
+  onRequestPermission,
+  onAddManualContact,
+  openChat,
+  dark,
+  setScreen,
+  setEditingGroup,
+  onlinePresenceSet,
+  showToast
+}: any) {
   const [query, setQuery] = useState("");
-  const [sortBy, setSortBy] = useState("name"); // "name" | "active"
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [manualName, setManualName] = useState("");
+  const [manualPhone, setManualPhone] = useState("");
+  const [manualEmail, setManualEmail] = useState("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const contacts = users
-    .filter((u) => {
-      if (currentUser && u.id === currentUser.id) return false;
+  const handleAddSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!manualName.trim() || !manualPhone.trim()) {
+      if (showToast) showToast("Name and phone number are required");
+      return;
+    }
+    onAddManualContact(manualName.trim(), manualPhone.trim(), manualEmail.trim());
+    setManualName("");
+    setManualPhone("");
+    setManualEmail("");
+    setShowAddModal(false);
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const text = event.target?.result as string;
+      if (!text) return;
+
+      const contacts: DeviceContact[] = [];
+      const blocks = text.split(/END:VCARD/i);
+
+      blocks.forEach((block, idx) => {
+        const nameMatch = block.match(/FN[;:]([^\r\n]+)/i) || block.match(/N[;:]([^\r\n]+)/i);
+        const telMatch = block.match(/TEL[;:]([^\r\n]+)/i);
+        const emailMatch = block.match(/EMAIL[;:]([^\r\n]+)/i);
+
+        let name = nameMatch ? nameMatch[1].replace(/^;+/, '').replace(/;/g, ' ').trim() : '';
+        let phone = telMatch ? telMatch[1].replace(/[^0-9\+\-\s\(\)]/g, '').trim() : '';
+        let email = emailMatch ? emailMatch[1].trim() : '';
+
+        if (phone) {
+          if (!name) name = "Contact " + (contacts.length + 1);
+          contacts.push({
+            id: 'vcard_' + Date.now() + '_' + idx,
+            name,
+            phone,
+            email
+          });
+        }
+      });
+
+      if (contacts.length > 0) {
+        contacts.forEach(c => onAddManualContact(c.name, c.phone, c.email));
+        if (showToast) showToast(`Imported ${contacts.length} contacts!`);
+      } else {
+        if (showToast) showToast("No valid contacts found in file");
+      }
+    };
+    reader.readAsText(file);
+    if (e.target) e.target.value = "";
+  };
+
+  const handleInvite = (c: DeviceContact) => {
+    const shareText = `Hey ${c.name}! Join me on ChatMe to chat for free: ${window.location.origin}`;
+    if (navigator.share) {
+      navigator.share({
+        title: "Join me on ChatMe",
+        text: shareText,
+        url: window.location.origin,
+      }).catch(() => {});
+    } else {
+      const smsUrl = `sms:${encodeURIComponent(c.phone)}?body=${encodeURIComponent(shareText)}`;
+      window.open(smsUrl, "_blank");
+    }
+    if (showToast) showToast(`Invite link prepared for ${c.name}`);
+  };
+
+  const processedContacts = (deviceContacts || [])
+    .map((c: DeviceContact) => {
+      const matchedUser = (users || []).find((u: any) => {
+        if (currentUser && u.id === currentUser.id) return false;
+        return isPhoneMatch(c.phone, u.phone) || (c.email && u.email && c.email.toLowerCase() === u.email.toLowerCase());
+      });
+
+      if (matchedUser) {
+        const online = isUserOnline(matchedUser, onlinePresenceSet);
+        return {
+          id: c.id,
+          name: matchedUser.fullname || c.name,
+          phone: c.phone || matchedUser.phone,
+          photo: matchedUser.photo || getDefaultAvatar(matchedUser.fullname),
+          isOnChatMe: true,
+          registeredUser: matchedUser,
+          isOnline: online,
+          statusText: online ? "Online" : formatLastSeen(matchedUser.last_seen || matchedUser.lastSeenRaw)
+        };
+      } else {
+        return {
+          id: c.id,
+          name: c.name,
+          phone: c.phone,
+          photo: getDefaultAvatar(c.name),
+          isOnChatMe: false,
+          registeredUser: null,
+          isOnline: false,
+          statusText: "Not on ChatMe"
+        };
+      }
+    })
+    .filter((c: any) => {
+      if (!query.trim()) return true;
       const q = query.toLowerCase();
       return (
-        u.fullname.toLowerCase().includes(q) ||
-        (u.email && u.email.toLowerCase().includes(q)) ||
-        (u.bio && u.bio.toLowerCase().includes(q))
+        c.name.toLowerCase().includes(q) ||
+        (c.phone && c.phone.toLowerCase().includes(q))
       );
     })
-    .sort((a, b) => {
-      if (sortBy === "name") return a.fullname.localeCompare(b.fullname);
-      if (a.online !== b.online) return a.online ? -1 : 1;
-      return 0;
+    .sort((a: any, b: any) => {
+      if (a.isOnChatMe !== b.isOnChatMe) return a.isOnChatMe ? -1 : 1;
+      return a.name.localeCompare(b.name);
     });
+
+  if (!contactsPermissionGranted && (!deviceContacts || deviceContacts.length === 0)) {
+    return (
+      <div className={`flex flex-col h-full ${dark ? "bg-gray-900 text-white" : "bg-white text-gray-900"}`}>
+        <ScreenHeader title="Contacts" dark={dark} />
+        <div className="flex-1 flex flex-col items-center justify-center p-6 text-center max-w-sm mx-auto my-auto">
+          <div className={`w-20 h-20 rounded-full flex items-center justify-center mb-5 ${dark ? "bg-green-500/10 text-green-400" : "bg-green-50 text-green-600"}`}>
+            <BookUser size={40} />
+          </div>
+          <h2 className="text-xl font-bold mb-2">Allow Contacts Access</h2>
+          <p className={`text-sm mb-6 ${dark ? "text-gray-400" : "text-gray-600"}`}>
+            ChatMe needs access to your device phone book to find friends and family who are registered on ChatMe.
+          </p>
+
+          <button
+            onClick={onRequestPermission}
+            className="w-full py-3.5 px-4 bg-green-500 hover:bg-green-600 active:bg-green-700 text-white font-semibold text-sm rounded-xl flex items-center justify-center gap-2 shadow-md transition mb-3"
+          >
+            <BookUser size={18} />
+            <span>Allow Contacts Access</span>
+          </button>
+
+          <button
+            onClick={() => setShowAddModal(true)}
+            className={`w-full py-3 px-4 border rounded-xl text-xs font-semibold transition ${
+              dark ? "border-gray-800 text-gray-300 hover:bg-gray-800" : "border-gray-200 text-gray-700 hover:bg-gray-50"
+            }`}
+          >
+            Add Phone Contact Manually
+          </button>
+        </div>
+
+        {showAddModal && (
+          <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4">
+            <div className={`w-full max-w-sm rounded-2xl p-5 ${dark ? "bg-gray-900 text-white border border-gray-800" : "bg-white text-gray-900"} shadow-2xl animate-fadeIn`}>
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="font-bold text-base">Add Phone Contact</h3>
+                <button onClick={() => setShowAddModal(false)}>
+                  <X size={20} className="text-gray-400 hover:text-gray-600" />
+                </button>
+              </div>
+
+              <form onSubmit={handleAddSubmit} className="flex flex-col gap-3">
+                <TextField icon={User} placeholder="Contact Name" value={manualName} onChange={(e) => setManualName(e.target.value)} dark={dark} />
+                <TextField icon={Phone} placeholder="Phone Number (e.g. +1 555-0199)" value={manualPhone} onChange={(e) => setManualPhone(e.target.value)} dark={dark} />
+                <TextField icon={Mail} placeholder="Email (Optional)" value={manualEmail} onChange={(e) => setManualEmail(e.target.value)} dark={dark} />
+
+                <div className="flex gap-2 mt-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowAddModal(false)}
+                    className={`flex-1 py-2.5 rounded-xl text-xs font-semibold border ${dark ? "border-gray-800 hover:bg-gray-800 text-gray-300" : "border-gray-200 hover:bg-gray-50 text-gray-700"}`}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="flex-1 py-2.5 rounded-xl text-xs font-semibold bg-green-500 text-white hover:bg-green-600 transition shadow"
+                  >
+                    Save Contact
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className={`flex flex-col h-full ${dark ? "bg-gray-900 text-white" : "bg-white text-gray-900"}`}>
-      <ScreenHeader 
-        title="Contacts" 
-        dark={dark} 
+      <ScreenHeader
+        title="Contacts"
+        dark={dark}
         right={
-          <div className="flex items-center gap-2">
-            <button 
-              onClick={() => setSortBy(s => s === "name" ? "active" : "name")} 
-              className={`text-xs px-2.5 py-1 rounded-lg font-medium transition ${dark ? "bg-gray-800 text-gray-300 hover:bg-gray-700" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => setShowAddModal(true)}
+              className={`p-2 rounded-xl transition ${dark ? "hover:bg-gray-800 text-green-400" : "hover:bg-green-50 text-green-600"}`}
+              title="Add Contact"
             >
-               Sort: {sortBy === "name" ? "Name" : "Active"}
+              <UserPlus size={20} />
             </button>
-            <button 
+            <button
+              onClick={onRequestPermission}
+              className={`p-2 rounded-xl transition ${dark ? "hover:bg-gray-800 text-gray-300" : "hover:bg-gray-100 text-gray-700"}`}
+              title="Sync Device Contacts"
+            >
+              <RefreshCw size={18} />
+            </button>
+            <button
               onClick={() => { setEditingGroup(null); setScreen("contactsSelection"); }}
               className={`p-2 rounded-xl transition ${dark ? "hover:bg-gray-800 text-gray-300" : "hover:bg-gray-100 text-gray-700"}`}
               title="New Group"
@@ -1228,83 +1749,181 @@ function ContactsScreen({ users, currentUser, openChat, dark, setScreen, setEdit
               <Users size={20} />
             </button>
           </div>
-        } 
+        }
       />
+
+      <input type="file" ref={fileInputRef} accept=".vcf,text/vcard,text/plain" onChange={handleFileUpload} className="hidden" />
+
       <div className={`px-4 py-3 border-b flex items-center justify-between gap-3 ${dark ? "bg-gray-900 border-gray-800" : "bg-white border-gray-100"}`}>
         <div className="flex-1">
-          <TextField 
-            icon={Search} 
-            placeholder="Search by name, username, or bio..." 
-            value={query} 
-            onChange={(e) => setQuery(e.target.value)} 
-            dark={dark} 
+          <TextField
+            icon={Search}
+            placeholder="Search phone contacts..."
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            dark={dark}
           />
         </div>
-        <button
-          onClick={onSyncGoogleContacts}
-          className="shrink-0 flex items-center gap-1.5 text-xs text-green-500 hover:text-green-600 font-semibold px-3 py-2 rounded-xl bg-green-50 dark:bg-green-950/40 border border-green-200/50 dark:border-green-800/50 transition shadow-sm"
-          title="Sync Google Contacts"
-        >
-          <Users size={15} /> Sync Google
-        </button>
       </div>
+
       <div className={`flex-1 overflow-y-auto ${dark ? "bg-gray-900" : "bg-white"}`}>
-        {contacts.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-64 text-gray-400 p-6 text-center">
-            <Users size={40} className="mb-2 opacity-40" />
-            <p className="text-sm font-medium">No contacts found</p>
-            <p className="text-xs text-gray-400 mt-1">Try searching with a different keyword</p>
+        {processedContacts.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-64 text-gray-400 p-6 text-center my-auto">
+            <BookUser size={44} className="mb-3 opacity-40 text-green-500" />
+            <p className="text-sm font-semibold">No device contacts found</p>
+            <p className="text-xs text-gray-400 mt-1 max-w-xs">
+              Sync your phone address book or add phone contacts manually to match friends on ChatMe.
+            </p>
+
+            <div className="flex gap-2 mt-4">
+              <button
+                onClick={() => setShowAddModal(true)}
+                className="px-4 py-2 bg-green-500 text-white rounded-xl text-xs font-semibold hover:bg-green-600 transition shadow"
+              >
+                + Add Phone Contact
+              </button>
+              <button
+                onClick={onRequestPermission}
+                className={`px-4 py-2 border rounded-xl text-xs font-semibold transition ${dark ? "border-gray-800 text-gray-300 hover:bg-gray-800" : "border-gray-200 text-gray-700 hover:bg-gray-100"}`}
+              >
+                Sync Device
+              </button>
+            </div>
           </div>
         ) : (
-          contacts.map((u) => (
-            <div
-              key={u.id}
-              onClick={() => openChat(u.id)}
-              className={`w-full flex items-center gap-3 px-4 py-3.5 border-b cursor-pointer transition ${
-                dark ? "border-gray-800 hover:bg-gray-800/60 active:bg-gray-800" : "border-gray-50 hover:bg-gray-50/80 active:bg-gray-100"
-              }`}
-            >
-              <div className="relative shrink-0">
-                <img src={u.photo} alt={u.fullname} className="w-12 h-12 rounded-full object-cover shadow-sm" />
-                <AnimatePresence>
-                  {u.online && (
-                    <motion.span
-                      initial={{ scale: 0, opacity: 0 }}
-                      animate={{ scale: 1, opacity: 1 }}
-                      exit={{ scale: 0, opacity: 0 }}
-                      transition={{ type: "spring", stiffness: 500, damping: 30 }}
-                      className="absolute bottom-0 right-0 w-3.5 h-3.5 rounded-full bg-green-500 border-2 border-white dark:border-gray-900"
-                    />
-                  )}
-                </AnimatePresence>
-              </div>
-              <div className="flex-1 text-left min-w-0">
-                <div className="flex items-center justify-between mb-0.5">
-                  <p className={`text-sm font-semibold truncate ${dark ? "text-white" : "text-gray-900"}`}>{u.fullname}</p>
-                  <span className="text-[11px] text-gray-400 shrink-0">
-                    {u.online ? "Online" : u.lastSeen || "Offline"}
-                  </span>
-                </div>
-                <p className={`text-xs truncate ${dark ? "text-gray-400" : "text-gray-500"}`}>
-                  {u.bio || u.email || "Hey there! I am using ChatMe"}
-                </p>
-              </div>
-              <div className="flex items-center gap-1.5 shrink-0 ml-2">
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    openChat(u.id);
+          <div>
+            {processedContacts.map((c: any) => {
+              return (
+                <div
+                  key={c.id}
+                  onClick={() => {
+                    if (c.isOnChatMe && c.registeredUser) {
+                      openChat(c.registeredUser.id);
+                    } else {
+                      handleInvite(c);
+                    }
                   }}
-                  className={`p-2 rounded-xl transition ${dark ? "hover:bg-gray-700 text-green-400" : "hover:bg-green-50 text-green-600"}`}
-                  title="Message"
+                  className={`w-full flex items-center gap-3 px-4 py-3.5 border-b cursor-pointer transition ${
+                    dark ? "border-gray-800 hover:bg-gray-800/60 active:bg-gray-800" : "border-gray-50 hover:bg-gray-50/80 active:bg-gray-100"
+                  }`}
                 >
-                  <MessageCircle size={18} />
-                </button>
-              </div>
-            </div>
-          ))
+                  <div className="relative shrink-0">
+                    <img src={c.photo} alt={c.name} className="w-12 h-12 rounded-full object-cover shadow-sm" />
+                    <AnimatePresence>
+                      {c.isOnline && (
+                        <motion.span
+                          initial={{ scale: 0, opacity: 0 }}
+                          animate={{ scale: 1, opacity: 1 }}
+                          exit={{ scale: 0, opacity: 0 }}
+                          transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                          className="absolute bottom-0 right-0 w-3.5 h-3.5 rounded-full bg-green-500 border-2 border-white dark:border-gray-900"
+                        />
+                      )}
+                    </AnimatePresence>
+                  </div>
+
+                  <div className="flex-1 text-left min-w-0">
+                    <div className="flex items-center justify-between mb-0.5">
+                      <p className={`text-sm font-semibold truncate ${dark ? "text-white" : "text-gray-900"}`}>
+                        {c.name}
+                      </p>
+                      <span className="text-[11px] text-gray-400 shrink-0">
+                        {c.statusText}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <p className={`text-xs truncate ${dark ? "text-gray-400" : "text-gray-500"}`}>
+                        {c.phone}
+                      </p>
+                      {c.isOnChatMe ? (
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-green-500/10 text-green-500 dark:bg-green-500/20">
+                          On ChatMe
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400">
+                          Invite
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                    {c.isOnChatMe && c.registeredUser ? (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openChat(c.registeredUser.id);
+                        }}
+                        className={`p-2 rounded-xl transition ${dark ? "hover:bg-gray-700 text-green-400" : "hover:bg-green-50 text-green-600"}`}
+                        title="Message"
+                      >
+                        <MessageCircle size={18} />
+                      </button>
+                    ) : (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleInvite(c);
+                        }}
+                        className={`p-2 rounded-xl transition ${dark ? "hover:bg-gray-700 text-gray-300" : "hover:bg-gray-100 text-gray-600"}`}
+                        title="Invite to ChatMe"
+                      >
+                        <Share2 size={16} />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         )}
       </div>
+
+      {showAddModal && (
+        <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4">
+          <div className={`w-full max-w-sm rounded-2xl p-5 ${dark ? "bg-gray-900 text-white border border-gray-800" : "bg-white text-gray-900"} shadow-2xl animate-fadeIn`}>
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="font-bold text-base">Add Phone Contact</h3>
+              <button onClick={() => setShowAddModal(false)}>
+                <X size={20} className="text-gray-400 hover:text-gray-600" />
+              </button>
+            </div>
+
+            <form onSubmit={handleAddSubmit} className="flex flex-col gap-3">
+              <TextField icon={User} placeholder="Contact Name" value={manualName} onChange={(e) => setManualName(e.target.value)} dark={dark} />
+              <TextField icon={Phone} placeholder="Phone Number (e.g. +1 555-0199)" value={manualPhone} onChange={(e) => setManualPhone(e.target.value)} dark={dark} />
+              <TextField icon={Mail} placeholder="Email (Optional)" value={manualEmail} onChange={(e) => setManualEmail(e.target.value)} dark={dark} />
+
+              <div className="flex justify-between items-center my-1 pt-1 border-t border-gray-100 dark:border-gray-800">
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="text-xs text-green-500 font-semibold hover:underline flex items-center gap-1.5"
+                >
+                  <Upload size={14} /> Import vCard File
+                </button>
+              </div>
+
+              <div className="flex gap-2 mt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowAddModal(false)}
+                  className={`flex-1 py-2.5 rounded-xl text-xs font-semibold border ${dark ? "border-gray-800 hover:bg-gray-800 text-gray-300" : "border-gray-200 hover:bg-gray-50 text-gray-700"}`}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-2.5 rounded-xl text-xs font-semibold bg-green-500 text-white hover:bg-green-600 transition shadow"
+                >
+                  Save Contact
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1475,10 +2094,189 @@ function ChangePasswordScreen({ onBack, onSave, dark }) {
 }
 
 /* ------------------------------------------------------------------ */
+/*  Wallpaper Screen                                                  */
+/* ------------------------------------------------------------------ */
+
+function WallpaperScreen({ dark, wallpaper, setWallpaper, onBack, showToast }: any) {
+  const [pendingImage, setPendingImage] = useState<string | null>(null);
+  const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const compressedDataUrl = await compressWallpaperImage(file);
+      setPendingImage(compressedDataUrl);
+      setIsPreviewModalOpen(true);
+    } catch (err) {
+      if (showToast) showToast("Failed to process selected image");
+    } finally {
+      if (e.target) e.target.value = "";
+    }
+  };
+
+  const applyPendingImage = () => {
+    if (pendingImage) {
+      setWallpaper(pendingImage);
+      setIsPreviewModalOpen(false);
+      setPendingImage(null);
+      if (showToast) showToast("Chat wallpaper updated!");
+    }
+  };
+
+  const selectPreset = (key: string) => {
+    setWallpaper(key);
+    if (showToast) showToast(`Wallpaper set to ${BUILTIN_WALLPAPERS[key]?.name || key}`);
+  };
+
+  const isCustom = wallpaper && (wallpaper.startsWith("data:") || wallpaper.startsWith("http://") || wallpaper.startsWith("https://") || wallpaper.startsWith("blob:"));
+
+  return (
+    <div className={`flex flex-col h-full overflow-y-auto ${dark ? "bg-gray-900 text-white" : "bg-white text-gray-900"}`}>
+      <ScreenHeader title="Chat Wallpaper" onBack={onBack} dark={dark} />
+
+      <input
+        type="file"
+        ref={fileInputRef}
+        accept="image/*"
+        className="hidden"
+        onChange={handleFileChange}
+      />
+
+      <div className="p-4 flex flex-col gap-4">
+        <div className="text-[11px] font-bold uppercase tracking-wider text-gray-400 px-1">
+          Wallpaper Preview
+        </div>
+
+        <div
+          className={`relative h-52 rounded-2xl overflow-hidden border shadow-inner flex flex-col justify-end p-3 ${
+            !isCustom ? (BUILTIN_WALLPAPERS[wallpaper]?.class || BUILTIN_WALLPAPERS.default.class) : ""
+          }`}
+          style={isCustom ? {
+            backgroundImage: `url(${wallpaper})`,
+            backgroundSize: "cover",
+            backgroundPosition: "center"
+          } : undefined}
+        >
+          {isCustom && <div className="absolute inset-0 bg-black/30 pointer-events-none" />}
+
+          <div className="relative z-10 flex flex-col gap-2">
+            <div className="self-start max-w-[80%] bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-100 px-3 py-1.5 rounded-xl rounded-bl-sm text-xs shadow">
+              Hey! This is a preview of your chat wallpaper.
+            </div>
+            <div className="self-end max-w-[80%] bg-green-500 text-white px-3 py-1.5 rounded-xl rounded-br-sm text-xs shadow">
+              Looks great & readable!
+            </div>
+          </div>
+        </div>
+
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          className="w-full py-3.5 px-4 bg-green-500 hover:bg-green-600 active:bg-green-700 text-white font-semibold text-sm rounded-xl flex items-center justify-center gap-2 shadow-md transition"
+        >
+          <ImageIcon size={20} />
+          <span>Choose from Photos / Gallery</span>
+        </button>
+
+        <div className="mt-1">
+          <div className="text-[11px] font-bold uppercase tracking-wider text-gray-400 px-1 mb-2">
+            Preset Wallpapers
+          </div>
+          <div className="grid grid-cols-2 gap-2.5">
+            {Object.keys(BUILTIN_WALLPAPERS).map((key) => {
+              const item = BUILTIN_WALLPAPERS[key];
+              const isSelected = wallpaper === key;
+              return (
+                <button
+                  key={key}
+                  onClick={() => selectPreset(key)}
+                  className={`p-2.5 rounded-xl border flex items-center gap-2.5 transition text-left ${
+                    isSelected
+                      ? "border-green-500 bg-green-500/10 font-bold"
+                      : dark ? "border-gray-800 bg-gray-800/60 hover:bg-gray-800" : "border-gray-200 bg-gray-50 hover:bg-gray-100"
+                  }`}
+                >
+                  <div className={`w-7 h-7 rounded-lg border shadow-inner shrink-0 ${item.previewBg}`} />
+                  <span className="text-xs flex-1 truncate">{item.name}</span>
+                  {isSelected && <Check size={16} className="text-green-500 shrink-0" />}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <button
+          onClick={() => {
+            setWallpaper("default");
+            if (showToast) showToast("Reset wallpaper to default");
+          }}
+          className={`w-full py-3 border rounded-xl text-xs font-medium transition mt-1 ${
+            dark ? "border-gray-800 text-gray-400 hover:text-white hover:bg-gray-800" : "border-gray-200 text-gray-600 hover:bg-gray-100"
+          }`}
+        >
+          Reset to Default
+        </button>
+      </div>
+
+      {isPreviewModalOpen && pendingImage && (
+        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4 animate-fadeIn">
+          <div className={`w-full max-w-xs rounded-2xl p-4 flex flex-col gap-3.5 shadow-2xl ${dark ? "bg-gray-900 border border-gray-800 text-white" : "bg-white text-gray-900"}`}>
+            <div className="flex justify-between items-center">
+              <h3 className="font-bold text-sm">Preview Wallpaper</h3>
+              <button onClick={() => { setIsPreviewModalOpen(false); setPendingImage(null); }}>
+                <X size={18} />
+              </button>
+            </div>
+
+            <div
+              className="relative h-60 rounded-xl overflow-hidden border shadow-inner flex flex-col justify-end p-3"
+              style={{
+                backgroundImage: `url(${pendingImage})`,
+                backgroundSize: "cover",
+                backgroundPosition: "center"
+              }}
+            >
+              <div className="absolute inset-0 bg-black/30 pointer-events-none" />
+              <div className="relative z-10 flex flex-col gap-2">
+                <div className="self-start bg-white text-gray-800 px-3 py-1.5 rounded-xl text-xs shadow">
+                  Sample incoming message
+                </div>
+                <div className="self-end bg-green-500 text-white px-3 py-1.5 rounded-xl text-xs shadow">
+                  Looks perfect on chat!
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-2 pt-1">
+              <button
+                onClick={() => { setIsPreviewModalOpen(false); setPendingImage(null); }}
+                className={`flex-1 py-2.5 rounded-xl text-xs font-semibold border ${
+                  dark ? "border-gray-700 hover:bg-gray-800 text-gray-300" : "border-gray-300 hover:bg-gray-100 text-gray-700"
+                }`}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={applyPendingImage}
+                className="flex-1 py-2.5 rounded-xl text-xs font-semibold bg-green-500 text-white hover:bg-green-600 transition shadow"
+              >
+                Apply Wallpaper
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /*  Settings Screen                                                    */
 /* ------------------------------------------------------------------ */
 
-function Toggle({ on, onChange }) {
+function Toggle({ on, onChange }: any) {
   return (
     <button
       onClick={() => onChange(!on)}
@@ -1489,7 +2287,11 @@ function Toggle({ on, onChange }) {
   );
 }
 
-function SettingsScreen({ dark, setDark, notifications, setNotifications, onBack, goChangePw, goInfo, onLogout, wallpaper, setWallpaper }) {
+function SettingsScreen({ dark, setDark, notifications, setNotifications, onBack, goChangePw, goInfo, goPrivacy, onLogout, wallpaper, goWallpaper, goChats, goBackupRestore }: any) {
+  const wpLabel = wallpaper?.startsWith("data:")
+    ? "Custom Photo"
+    : (BUILTIN_WALLPAPERS[wallpaper]?.name || "Default");
+
   return (
     <div className={`flex flex-col h-full overflow-y-auto ${dark ? "bg-gray-900" : "bg-white"}`}>
       <ScreenHeader title="Settings" onBack={onBack} dark={dark} />
@@ -1502,18 +2304,49 @@ function SettingsScreen({ dark, setDark, notifications, setNotifications, onBack
           <Toggle on={dark} onChange={setDark} />
         </div>
         
-        <div className={`rounded-xl px-4 py-3.5 ${dark ? "bg-gray-800" : "bg-gray-50"}`}>
-           <span className={`text-sm font-medium ${dark ? "text-gray-100" : "text-gray-800"}`}>Wallpaper</span>
-           <div className="flex gap-2 mt-2">
-             {Object.keys(WALLPAPERS).map(key => (
-               <button 
-                 key={key} 
-                 onClick={() => setWallpaper(key)}
-                 className={`w-8 h-8 rounded-full border-2 ${wallpaper === key ? 'border-green-500' : 'border-transparent'} ${WALLPAPERS[key].split(" ")[0].replace("bg-", "bg-")}`}
-               />
-             ))}
-           </div>
-        </div>
+        {/* Chats Settings (Wallpaper, Backup & Restore) */}
+        <button
+          onClick={() => (goChats ? goChats() : goWallpaper?.())}
+          className={`flex items-center justify-between rounded-xl px-4 py-3.5 ${dark ? "bg-gray-800 hover:bg-gray-700/60" : "bg-gray-50 hover:bg-gray-100"}`}
+        >
+          <div className="flex items-center gap-3">
+            <MessageSquare size={18} className="text-emerald-500" />
+            <div className="text-left">
+              <span className={`text-sm font-medium block ${dark ? "text-gray-100" : "text-gray-800"}`}>Chats</span>
+              <span className="text-[11px] text-gray-400">Theme, wallpaper, backup & restore</span>
+            </div>
+          </div>
+          <ChevronRight size={16} className="text-gray-400" />
+        </button>
+
+        {/* Dedicated Backup & Restore Shortcut */}
+        <button
+          onClick={() => (goBackupRestore ? goBackupRestore() : goChats?.())}
+          className={`flex items-center justify-between rounded-xl px-4 py-3.5 ${dark ? "bg-gray-800 hover:bg-gray-700/60" : "bg-gray-50 hover:bg-gray-100"}`}
+        >
+          <div className="flex items-center gap-3">
+            <CloudUpload size={18} className="text-teal-500" />
+            <div className="text-left">
+              <span className={`text-sm font-medium block ${dark ? "text-gray-100" : "text-gray-800"}`}>Backup & Restore</span>
+              <span className="text-[11px] text-gray-400">Back up and restore your ChatMe data</span>
+            </div>
+          </div>
+          <ChevronRight size={16} className="text-gray-400" />
+        </button>
+
+        <button
+          onClick={() => goWallpaper && goWallpaper()}
+          className={`flex items-center justify-between rounded-xl px-4 py-3.5 ${dark ? "bg-gray-800 hover:bg-gray-700/60" : "bg-gray-50 hover:bg-gray-100"}`}
+        >
+          <div className="flex items-center gap-3">
+            <ImageIcon size={18} className="text-purple-500" />
+            <span className={`text-sm font-medium ${dark ? "text-gray-100" : "text-gray-800"}`}>Chat Wallpaper</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-400">{wpLabel}</span>
+            <ChevronRight size={16} className="text-gray-400" />
+          </div>
+        </button>
 
         <div className={`flex items-center justify-between rounded-xl px-4 py-3.5 ${dark ? "bg-gray-800" : "bg-gray-50"}`}>
           <div className="flex items-center gap-3">
@@ -1524,7 +2357,7 @@ function SettingsScreen({ dark, setDark, notifications, setNotifications, onBack
         </div>
 
         {[
-          { icon: Shield, label: "Privacy", action: () => goInfo("privacy") },
+          { icon: Shield, label: "Privacy", action: () => (goPrivacy ? goPrivacy() : goInfo("privacy")) },
           { icon: KeyRound, label: "Change Password", action: goChangePw },
           { icon: Info, label: "About", action: () => goInfo("about") },
           { icon: HelpCircle, label: "Help", action: () => goInfo("help") },
@@ -1596,6 +2429,87 @@ export default function App() {
   const [selectedContactsForGroup, setSelectedContactsForGroup] = useState([]);
   const [editingGroup, setEditingGroup] = useState(null);
   const [statuses, setStatuses] = useState<any[]>([]);
+  const [onlinePresenceSet, setOnlinePresenceSet] = useState<Set<string>>(new Set());
+  const [deviceContacts, setDeviceContacts] = useState<DeviceContact[]>([]);
+  const [contactsPermissionGranted, setContactsPermissionGranted] = useState<boolean>(false);
+  const presenceChannelRef = useRef<any>(null);
+
+  const saveDeviceContacts = (newContacts: DeviceContact[]) => {
+    setDeviceContacts(newContacts);
+    setContactsPermissionGranted(true);
+    if (currentUser?.id) {
+      try {
+        localStorage.setItem(`chatme_device_contacts_${currentUser.id}`, JSON.stringify(newContacts));
+        localStorage.setItem(`chatme_contacts_perm_${currentUser.id}`, "true");
+      } catch (e) {}
+    }
+  };
+
+  const handleAccessDeviceContacts = async () => {
+    if ('contacts' in navigator && (navigator.contacts as any).select) {
+      try {
+        const props = ['name', 'tel', 'email'];
+        const opts = { multiple: true };
+        const imported = await (navigator.contacts as any).select(props, opts);
+        if (imported && imported.length > 0) {
+          const parsed: DeviceContact[] = imported.map((c: any, index: number) => ({
+            id: 'dev_contact_' + Date.now() + '_' + index,
+            name: c.name?.[0] || 'Device Contact',
+            phone: c.tel?.[0] || '',
+            email: c.email?.[0] || ''
+          })).filter(c => c.phone.trim().length > 0);
+
+          const merged = [...deviceContacts];
+          parsed.forEach(p => {
+            if (!merged.some(m => isPhoneMatch(m.phone, p.phone))) {
+              merged.push(p);
+            }
+          });
+
+          saveDeviceContacts(merged);
+          showToast(`Synced ${parsed.length} contacts from your device!`);
+          return true;
+        }
+      } catch (e: any) {
+        console.log('Contact Picker cancelled or error', e);
+      }
+    }
+
+    setContactsPermissionGranted(true);
+    if (currentUser?.id) {
+      try {
+        localStorage.setItem(`chatme_contacts_perm_${currentUser.id}`, "true");
+      } catch (e) {}
+    }
+    showToast("Contacts access requested. Add phone contacts or import .vcf files below.");
+    return false;
+  };
+
+  const handleAddManualContact = (name: string, phone: string, email?: string) => {
+    if (!name.trim() || !phone.trim()) {
+      showToast("Name and phone number are required");
+      return;
+    }
+    const newContact: DeviceContact = {
+      id: 'dev_contact_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+      name: name.trim(),
+      phone: phone.trim(),
+      email: email?.trim() || ''
+    };
+
+    const updated = [newContact, ...deviceContacts.filter(c => !isPhoneMatch(c.phone, phone))];
+    saveDeviceContacts(updated);
+    showToast(`Added ${name.trim()} to device contacts!`);
+  };
+
+  const handleSetWallpaper = (wp: string) => {
+    setWallpaper(wp);
+    if (currentUser?.id) {
+      try {
+        localStorage.setItem(`chatme_wallpaper_${currentUser.id}`, wp);
+      } catch (e) {}
+    }
+  };
 
   const loadUserData = async (authUser) => {
     try {
@@ -1621,8 +2535,8 @@ export default function App() {
             full_name: authUser.user_metadata?.full_name || authUser.user_metadata?.fullname || authUser.email?.split('@')[0] || 'User',
             fullname: authUser.user_metadata?.full_name || authUser.user_metadata?.fullname || authUser.email?.split('@')[0] || 'User',
             email: authUser.email,
-            avatar_url: authUser.user_metadata?.avatar_url || authUser.user_metadata?.photo || "https://i.pravatar.cc/150?img=68",
-            photo: authUser.user_metadata?.avatar_url || authUser.user_metadata?.photo || "https://i.pravatar.cc/150?img=68",
+            avatar_url: authUser.user_metadata?.avatar_url || authUser.user_metadata?.photo || getDefaultAvatar(authUser.email),
+            photo: authUser.user_metadata?.avatar_url || authUser.user_metadata?.photo || getDefaultAvatar(authUser.email),
             bio: "Hey there! I am using ChatMe",
             phone: "",
             online: true,
@@ -1637,7 +2551,7 @@ export default function App() {
         id: profile.id || authUser.id,
         fullname: profile.full_name || profile.fullname || authUser.user_metadata?.full_name || authUser.user_metadata?.fullname || "User",
         email: profile.email || authUser.email,
-        photo: profile.avatar_url || profile.photo || authUser.user_metadata?.avatar_url || authUser.user_metadata?.photo || "https://i.pravatar.cc/150?img=68",
+        photo: profile.avatar_url || profile.photo || authUser.user_metadata?.avatar_url || authUser.user_metadata?.photo || getDefaultAvatar(profile.full_name || authUser.email),
         bio: profile.bio || "",
         phone: profile.phone || "",
         online: true,
@@ -1645,6 +2559,19 @@ export default function App() {
       };
 
       setCurrentUser(formattedUser);
+
+      try {
+        const savedWp = localStorage.getItem(`chatme_wallpaper_${formattedUser.id}`);
+        if (savedWp) {
+          setWallpaper(savedWp);
+        }
+        const savedContacts = localStorage.getItem(`chatme_device_contacts_${formattedUser.id}`);
+        if (savedContacts) {
+          setDeviceContacts(JSON.parse(savedContacts));
+        }
+        const savedPerm = localStorage.getItem(`chatme_contacts_perm_${formattedUser.id}`);
+        setContactsPermissionGranted(savedPerm === "true" || (savedContacts && JSON.parse(savedContacts).length > 0));
+      } catch (e) {}
 
       const nowIso = new Date().toISOString();
       await supabase
@@ -1658,22 +2585,34 @@ export default function App() {
           id: p.id || p.user_id,
           fullname: p.full_name || p.fullname || p.name || "User",
           email: p.email || "",
-          photo: p.avatar_url || p.photo || "https://i.pravatar.cc/150?img=1",
+          photo: p.avatar_url || p.photo || getDefaultAvatar(p.full_name || p.fullname),
           bio: p.bio || "Hey there! I am using ChatMe",
           phone: p.phone || "",
-          online: p.online !== undefined ? p.online : true,
+          online: p.online !== undefined ? Boolean(p.online) : false,
+          last_seen: p.last_seen || null,
+          lastSeenRaw: p.last_seen || null,
           lastSeen: formatLastSeen(p.last_seen)
         })));
       } else {
         setUsers([formattedUser]);
       }
 
+      await cleanupExpiredStatuses();
       const { data: statusData } = await supabase.from('status_posts').select('*');
       if (statusData && statusData.length > 0) {
-        setStatuses(statusData.filter(s => new Date(s.expires_at) > new Date()));
+        setStatuses(filterFreshStatuses(statusData));
       } else {
         setStatuses([]);
       }
+
+      // Check and execute scheduled automatic backup if due
+      try {
+        checkAndRunAutoBackup(formattedUser, messagesData, {
+          wallpaper: savedWp || 'default',
+          notifications,
+          deviceContacts: savedContacts ? JSON.parse(savedContacts) : []
+        });
+      } catch (e) {}
 
       setScreen("home");
       setActiveTab("chats");
@@ -1690,6 +2629,9 @@ export default function App() {
       } else {
         setScreen("signin");
       }
+    }).catch((err) => {
+      console.error("Session fetch error:", err);
+      setScreen("signin");
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -1715,10 +2657,12 @@ export default function App() {
               id: p.id || p.user_id,
               fullname: p.fullname || p.name || "User",
               email: p.email || "",
-              photo: p.photo || p.avatar_url || "https://i.pravatar.cc/150?img=1",
+              photo: p.photo || p.avatar_url || getDefaultAvatar(p.full_name || p.fullname),
               bio: p.bio || "Hey there! I am using ChatMe",
               phone: p.phone || "",
-              online: p.online !== undefined ? p.online : true,
+              online: p.online !== undefined ? Boolean(p.online) : false,
+              last_seen: p.last_seen || null,
+              lastSeenRaw: p.last_seen || null,
               lastSeen: formatLastSeen(p.last_seen)
             };
             setUsers(prev => {
@@ -1739,6 +2683,175 @@ export default function App() {
       };
     } catch (e) {}
   }, []);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      cleanupExpiredStatuses();
+      setStatuses(prev => filterFreshStatuses(prev));
+    }, 60000);
+
+    try {
+      const statusChannel = supabase
+        .channel('public:status_posts')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'status_posts' }, (payload) => {
+          if (payload.eventType === 'INSERT') {
+            const newStatus = payload.new as any;
+            setStatuses(prev => {
+              if (prev.some(s => s.id === newStatus.id)) return prev;
+              return filterFreshStatuses([newStatus, ...prev]);
+            });
+          } else if (payload.eventType === 'DELETE') {
+            const deletedId = payload.old.id;
+            setStatuses(prev => prev.filter(s => s.id !== deletedId));
+          }
+        })
+        .subscribe();
+
+      return () => {
+        clearInterval(interval);
+        supabase.removeChannel(statusChannel);
+      };
+    } catch (e) {
+      return () => clearInterval(interval);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!currentUser?.id) return;
+
+    const currentUserId = String(currentUser.id);
+
+    const presenceChannel = supabase.channel('online-presence', {
+      config: { presence: { key: currentUserId } }
+    });
+
+    presenceChannelRef.current = presenceChannel;
+
+    presenceChannel
+      .on('presence', { event: 'sync' }, () => {
+        const state = presenceChannel.presenceState();
+        const onlineIds = new Set<string>();
+        Object.keys(state).forEach(key => {
+          onlineIds.add(key);
+        });
+        setOnlinePresenceSet(onlineIds);
+      })
+      .on('presence', { event: 'join' }, ({ key }) => {
+        setOnlinePresenceSet(prev => new Set(prev).add(key));
+      })
+      .on('presence', { event: 'leave' }, ({ key }) => {
+        setOnlinePresenceSet(prev => {
+          const next = new Set(prev);
+          next.delete(key);
+          return next;
+        });
+      })
+      .subscribe(async (status) => {
+        if (status === 'SUBSCRIBED') {
+          await presenceChannel.track({
+            user_id: currentUserId,
+            online_at: new Date().toISOString()
+          });
+        }
+      });
+
+    const heartbeatInterval = setInterval(async () => {
+      if (document.visibilityState === 'visible' && navigator.onLine) {
+        const nowIso = new Date().toISOString();
+        await supabase
+          .from('profiles')
+          .update({ online: true, last_seen: nowIso })
+          .eq('id', currentUser.id);
+
+        if (presenceChannelRef.current) {
+          presenceChannelRef.current.track({
+            user_id: currentUserId,
+            online_at: nowIso
+          });
+        }
+      }
+    }, 15000);
+
+    const handleVisibilityChange = async () => {
+      if (document.visibilityState === 'hidden') {
+        const nowIso = new Date().toISOString();
+        await supabase
+          .from('profiles')
+          .update({ online: false, last_seen: nowIso })
+          .eq('id', currentUser.id);
+
+        if (presenceChannelRef.current) {
+          presenceChannelRef.current.untrack();
+        }
+      } else if (document.visibilityState === 'visible') {
+        const nowIso = new Date().toISOString();
+        await supabase
+          .from('profiles')
+          .update({ online: true, last_seen: nowIso })
+          .eq('id', currentUser.id);
+
+        if (presenceChannelRef.current) {
+          presenceChannelRef.current.track({
+            user_id: currentUserId,
+            online_at: nowIso
+          });
+        }
+      }
+    };
+
+    const handleOffline = async () => {
+      const nowIso = new Date().toISOString();
+      await supabase
+        .from('profiles')
+        .update({ online: false, last_seen: nowIso })
+        .eq('id', currentUser.id);
+
+      if (presenceChannelRef.current) {
+        presenceChannelRef.current.untrack();
+      }
+    };
+
+    const handleOnline = async () => {
+      const nowIso = new Date().toISOString();
+      await supabase
+        .from('profiles')
+        .update({ online: true, last_seen: nowIso })
+        .eq('id', currentUser.id);
+
+      if (presenceChannelRef.current) {
+        presenceChannelRef.current.track({
+          user_id: currentUserId,
+          online_at: nowIso
+        });
+      }
+    };
+
+    const handleUnload = () => {
+      const nowIso = new Date().toISOString();
+      supabase
+        .from('profiles')
+        .update({ online: false, last_seen: nowIso })
+        .eq('id', currentUser.id);
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('offline', handleOffline);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('beforeunload', handleUnload);
+
+    return () => {
+      clearInterval(heartbeatInterval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('beforeunload', handleUnload);
+
+      if (presenceChannelRef.current) {
+        presenceChannelRef.current.untrack();
+        supabase.removeChannel(presenceChannelRef.current);
+      }
+    };
+  }, [currentUser?.id]);
 
   const handleAddStatus = async (newStatus) => {
     const statusWithId = { ...newStatus, id: Date.now() };
@@ -1810,7 +2923,7 @@ export default function App() {
         options: {
           data: {
             full_name: fullname,
-            avatar_url: photo || "https://i.pravatar.cc/150?img=68"
+            avatar_url: photo || getDefaultAvatar(fullname)
           }
         }
       });
@@ -1825,8 +2938,8 @@ export default function App() {
           full_name: fullname,
           fullname,
           email,
-          avatar_url: photo || "https://i.pravatar.cc/150?img=68",
-          photo: photo || "https://i.pravatar.cc/150?img=68",
+          avatar_url: photo || getDefaultAvatar(fullname),
+          photo: photo || getDefaultAvatar(fullname),
           bio: bio || "Hey there! I am using ChatMe",
           phone: phone || "",
           online: true,
@@ -1883,58 +2996,6 @@ export default function App() {
     } catch (e: any) {
       showToast(e.message || "Failed to send reset email");
     }
-  };
-
-  const handleSyncGoogleContacts = async () => {
-    if ('contacts' in navigator && (navigator.contacts as any).select) {
-      try {
-        const props = ['name', 'tel', 'email'];
-        const opts = { multiple: true };
-        const imported = await (navigator.contacts as any).select(props, opts);
-        if (imported && imported.length > 0) {
-          const newUsers = imported.map((c: any, index: number) => ({
-            id: Date.now() + index,
-            fullname: c.name?.[0] || 'Device Contact',
-            username: (c.name?.[0] || 'contact').toLowerCase().replace(/\s+/g, ''),
-            phone: c.tel?.[0] || '+1 555-0199',
-            email: c.email?.[0] || '',
-            photo: 'https://i.pravatar.cc/150?img=' + ((index % 70) + 1),
-            online: true,
-            bio: 'Imported from device contacts'
-          }));
-          setUsers(prev => [...prev, ...newUsers]);
-          showToast(`Successfully imported ${newUsers.length} device contacts!`);
-          return;
-        }
-      } catch (e) {
-        console.log('Contact Picker cancelled or not supported', e);
-      }
-    }
-
-    // Simulate Google Contacts sync with professional contacts
-    const googleContactsPool = [
-      { fullname: "Sarah Jenkins", username: "sarahj", phone: "+1 555-0142", email: "sarah.jenkins@gmail.com", photo: "https://i.pravatar.cc/150?img=32", bio: "Product Designer | Google Contacts" },
-      { fullname: "David Miller", username: "dmiller", phone: "+1 555-0188", email: "david.miller@work.com", photo: "https://i.pravatar.cc/150?img=12", bio: "Software Engineer | Google Contacts" },
-      { fullname: "Priya Patel", username: "priyap", phone: "+1 555-0193", email: "priya.patel@gmail.com", photo: "https://i.pravatar.cc/150?img=45", bio: "Marketing Director | Google Contacts" },
-      { fullname: "Marcus Vance", username: "mvance", phone: "+1 555-0167", email: "marcus.vance@tech.io", photo: "https://i.pravatar.cc/150?img=68", bio: "Engineering Lead | Google Contacts" },
-      { fullname: "Elena Rostova", username: "elena_r", phone: "+1 555-0121", email: "elena.rostova@design.co", photo: "https://i.pravatar.cc/150?img=25", bio: "UX Researcher | Google Contacts" }
-    ];
-
-    const timestamp = Date.now();
-    const syncedUsers = googleContactsPool.map((c, idx) => ({
-      id: timestamp + idx,
-      ...c,
-      online: true
-    }));
-
-    setUsers(prev => {
-      // avoid duplicates by username
-      const existingUsernames = new Set(prev.map(u => u.username));
-      const uniqueNew = syncedUsers.filter(u => !existingUsernames.has(u.username));
-      return [...prev, ...uniqueNew];
-    });
-
-    showToast(`Successfully synced 5 Google Contacts!`);
   };
 
   const fetchMessagesForUser = async (otherUserId) => {
@@ -2042,50 +3103,74 @@ export default function App() {
     updateLastSeen();
   };
 
-  const handleSend = async (text) => {
+  const handleSend = async (text: string) => {
     if (!currentUser || !activeChatId) return;
     updateLastSeen();
     const now = new Date();
     const timestamp = now.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-    const newMsg = { id: Date.now(), senderId: currentUser.id, text, timestamp, status: "sent", reaction: null };
+    const localId = Date.now();
+    const newMsg = { id: localId, senderId: currentUser.id, text, timestamp, status: "sent", reaction: null };
+
     setMessagesData((prev) => ({
       ...prev,
       [activeChatId]: [...(prev[activeChatId] || []), newMsg],
     }));
 
     try {
-      await supabase.from('messages').insert({
+      const { data, error } = await supabase.from('messages').insert({
         sender_id: currentUser.id,
         receiver_id: activeChatId,
         message: text,
         created_at: now.toISOString(),
         read: false
-      });
+      }).select().single();
+
+      if (data && !error) {
+        setMessagesData((prev) => ({
+          ...prev,
+          [activeChatId]: (prev[activeChatId] || []).map((m) =>
+            m.id === localId ? { ...m, id: data.id, status: "delivered" } : m
+          ),
+        }));
+      } else {
+        setTimeout(() => {
+          setMessagesData((prev) => ({
+            ...prev,
+            [activeChatId]: (prev[activeChatId] || []).map((m) =>
+              m.id === localId ? { ...m, status: "delivered" } : m
+            ),
+          }));
+        }, 500);
+      }
     } catch (e) {
-      console.log("Supabase send message fallback", e);
+      console.log("Supabase send message error", e);
     }
+  };
 
-    setTimeout(() => {
-      setMessagesData((prev) => ({
-        ...prev,
-        [activeChatId]: (prev[activeChatId] || []).map((m) => (m.id === newMsg.id ? { ...m, status: "delivered" } : m)),
-      }));
-    }, 700);
+  const handleUpdateProfile = async (updates: any) => {
+    if (!currentUser?.id) return;
+    try {
+      const updatedUser = { ...currentUser, ...updates };
+      setCurrentUser(updatedUser);
+      setUsers((prev) => prev.map((u) => (u.id === updatedUser.id ? updatedUser : u)));
 
-    setTimeout(() => setTypingFor(activeChatId), 1200);
+      await supabase.from('profiles').upsert({
+        id: currentUser.id,
+        user_id: currentUser.id,
+        full_name: updates.fullname || currentUser.fullname,
+        fullname: updates.fullname || currentUser.fullname,
+        bio: updates.bio ?? currentUser.bio,
+        phone: updates.phone ?? currentUser.phone,
+        avatar_url: updates.photo ?? currentUser.photo,
+        photo: updates.photo ?? currentUser.photo,
+        updated_at: new Date().toISOString()
+      });
 
-    setTimeout(() => {
-      setTypingFor(null);
-      const reply = REPLIES[Math.floor(Math.random() * REPLIES.length)];
-      const replyTime = new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-      setMessagesData((prev) => ({
-        ...prev,
-        [activeChatId]: [
-          ...(prev[activeChatId] || []).map((m) => (m.id === newMsg.id ? { ...m, status: "read" } : m)),
-          { id: Date.now() + 1, senderId: activeChatId, text: reply, timestamp: replyTime, status: "delivered", reaction: null },
-        ],
-      }));
-    }, 2800);
+      showToast("Profile updated successfully!");
+      setScreen("profile");
+    } catch (e: any) {
+      showToast(e.message || "Failed to update profile");
+    }
   };
 
   const handleReact = async (messageId, emoji) => {
@@ -2139,10 +3224,23 @@ export default function App() {
         dark={dk}
         wallpaper={wallpaper}
         onEditGroup={(g) => { setEditingGroup(g); setScreen("groupCreation"); }}
+        onlinePresenceSet={onlinePresenceSet}
+        onCall={handleCall}
+        showToast={showToast}
       />
     );
   } else if (screen === "contactsSelection") {
     body = <ContactsSelectionScreen users={users} currentUser={currentUser} onNext={(s) => { setSelectedContactsForGroup(s); setScreen("groupCreation"); }} onBack={() => { setEditingGroup(null); setScreen("home"); }} dark={dk} />;
+  } else if (screen === "wallpaper") {
+    body = (
+      <WallpaperScreen
+        dark={dk}
+        wallpaper={wallpaper}
+        setWallpaper={handleSetWallpaper}
+        onBack={() => setScreen("settings")}
+        showToast={showToast}
+      />
+    );
   } else if (screen === "groupCreation") {
     body = (
       <GroupCreationScreen
@@ -2232,13 +3330,7 @@ export default function App() {
         user={currentUser}
         onBack={() => setScreen("profile")}
         dark={dk}
-        onSave={(updates) => {
-          const updated = { ...currentUser, ...updates };
-          setCurrentUser(updated);
-          setUsers((prev) => prev.map((u) => (u.id === updated.id ? updated : u)));
-          showToast("Profile updated");
-          setScreen("profile");
-        }}
+        onSave={handleUpdateProfile}
       />
     );
   } else if (screen === "settings") {
@@ -2250,10 +3342,73 @@ export default function App() {
         setNotifications={setNotifications}
         onBack={() => setScreen("profile")}
         goChangePw={() => setScreen("changePassword")}
-        goInfo={(kind) => setScreen("info:" + kind)}
+        goInfo={(kind) => (kind === "privacy" ? setScreen("privacy") : setScreen("info:" + kind))}
+        goPrivacy={() => setScreen("privacy")}
         onLogout={handleLogout}
         wallpaper={wallpaper}
-        setWallpaper={setWallpaper}
+        setWallpaper={handleSetWallpaper}
+        goWallpaper={() => setScreen("wallpaper")}
+        goChats={() => setScreen("chatsSettings")}
+        goBackupRestore={() => setScreen("backupRestore")}
+      />
+    );
+  } else if (screen === "chatsSettings") {
+    const wpLabel = wallpaper?.startsWith("data:")
+      ? "Custom Photo"
+      : (BUILTIN_WALLPAPERS[wallpaper]?.name || "Default");
+    body = (
+      <ChatsSettingsScreen
+        dark={dk}
+        onBack={() => setScreen("settings")}
+        goWallpaper={() => setScreen("wallpaper")}
+        goBackupRestore={() => setScreen("backupRestore")}
+        wallpaperLabel={wpLabel}
+        currentUser={currentUser}
+      />
+    );
+  } else if (screen === "backupRestore") {
+    body = (
+      <BackupRestoreScreen
+        currentUser={currentUser}
+        messagesData={messagesData}
+        localPreferences={{
+          wallpaper,
+          notifications,
+          deviceContacts,
+          calls,
+          statuses
+        }}
+        dark={dk}
+        onBack={() => setScreen("chatsSettings")}
+        showToast={showToast}
+        onRestoreComplete={(restored) => {
+          if (restored.wallpaper) {
+            setWallpaper(restored.wallpaper);
+          }
+          if (restored.contacts) {
+            setDeviceContacts(restored.contacts);
+          }
+          if (currentUser?.id) {
+            if (activeChatId) {
+              fetchMessagesForUser(activeChatId);
+            }
+            loadUserData(currentUser);
+          }
+        }}
+      />
+    );
+  } else if (screen === "privacy") {
+    body = (
+      <PrivacyScreen
+        currentUser={currentUser}
+        users={users}
+        onBack={() => setScreen("settings")}
+        dark={dk}
+        showToast={showToast}
+        onUpdateUser={(updated) => {
+          setCurrentUser(updated);
+          setUsers((prev) => prev.map((u) => (u.id === updated.id ? updated : u)));
+        }}
       />
     );
   } else if (screen === "changePassword") {
@@ -2280,11 +3435,37 @@ export default function App() {
     // main tabbed area
     let tabBody = null;
     if (activeTab === "chats")
-      tabBody = <HomeScreen users={users} currentUser={currentUser} messagesData={messagesData} unread={unread} openChat={openChat} dark={dk} />;
+      tabBody = <HomeScreen users={users} currentUser={currentUser} messagesData={messagesData} unread={unread} openChat={openChat} dark={dk} onlinePresenceSet={onlinePresenceSet} />;
     else if (activeTab === "updates")
       tabBody = <UpdatesScreen dark={dk} currentUser={currentUser} statuses={statuses} onAddStatus={handleAddStatus} onViewStatus={(s) => setScreen("statusView:" + s.id)} onDeleteStatus={handleDeleteStatus} />;
+    else if (activeTab === "add-contact")
+      tabBody = (
+        <AddContactScreen
+          currentUser={currentUser}
+          users={users}
+          openChat={openChat}
+          onBack={() => { setActiveTab("chats"); setScreen("home"); }}
+          dark={dk}
+          showToast={showToast}
+        />
+      );
     else if (activeTab === "contacts")
-      tabBody = <ContactsScreen users={users} currentUser={currentUser} openChat={openChat} dark={dk} setScreen={setScreen} setEditingGroup={setEditingGroup} onSyncGoogleContacts={handleSyncGoogleContacts} />;
+      tabBody = (
+        <ContactsScreen
+          users={users}
+          currentUser={currentUser}
+          deviceContacts={deviceContacts}
+          contactsPermissionGranted={contactsPermissionGranted}
+          onRequestPermission={handleAccessDeviceContacts}
+          onAddManualContact={handleAddManualContact}
+          openChat={openChat}
+          dark={dk}
+          setScreen={setScreen}
+          setEditingGroup={setEditingGroup}
+          onlinePresenceSet={onlinePresenceSet}
+          showToast={showToast}
+        />
+      );
     else if (activeTab === "calls")
       tabBody = <CallsScreen calls={calls} users={users} dark={dk} onCall={handleCall} />;
     else if (activeTab === "ai")
@@ -2308,12 +3489,14 @@ export default function App() {
   }
 
   return (
-    <div className="w-full h-full flex items-center justify-center bg-gray-200 py-4">
+    <div
+      className={`w-full min-w-full h-full min-h-screen min-h-[100dvh] flex flex-col overflow-hidden ${
+        dk ? "bg-gray-900 text-white" : "bg-white text-gray-900"
+      }`}
+      style={{ fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" }}
+    >
       <Toast message={toast} />
-      <div
-        className={`relative w-full max-w-sm h-[720px] rounded-xl shadow-2xl overflow-hidden border ${dk ? "border-gray-800" : "border-gray-200"}`}
-        style={{ fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" }}
-      >
+      <div className="w-full h-full min-h-0 flex-1 flex flex-col overflow-hidden relative">
         {body}
       </div>
     </div>

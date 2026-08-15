@@ -1,6 +1,6 @@
 {
   "name": "ChatMe",
   "description": "A modern chat application imported from GitHub.",
-  "requestFramePermissions": [],
+  "requestFramePermissions": ["camera", "microphone", "geolocation"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

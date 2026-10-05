@@ -23,7 +23,8 @@ import {
   Settings,
   ExternalLink,
   ChevronRight,
-  HelpCircle
+  HelpCircle,
+  Info
 } from "lucide-react";
 import { Contacts } from "@capacitor-community/contacts";
 import { supabase } from "../lib/supabase";
@@ -63,6 +64,7 @@ export function AddContactScreen({
   const [loading, setLoading] = useState(true);
   const [permissionState, setPermissionState] = useState<"granted" | "denied" | "prompt" | "unsupported">("prompt");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [iframeNotice, setIframeNotice] = useState<string | null>(null);
 
   // States for user lookup per contact
   const [checkingContactId, setCheckingContactId] = useState<string | null>(null);
@@ -179,7 +181,10 @@ export function AddContactScreen({
       }
 
       // Fallback: Web Contacts API or sample contacts for browser testing
-      if ("contacts" in navigator && (navigator.contacts as any).select) {
+      const isTopFrame = typeof window !== "undefined" && window.self === window.top;
+      const hasWebContacts = typeof navigator !== "undefined" && "contacts" in navigator && typeof (navigator.contacts as any)?.select === "function";
+
+      if (hasWebContacts && isTopFrame) {
         setPermissionState("granted");
         try {
           const props = ["name", "tel", "email"];
@@ -200,9 +205,11 @@ export function AddContactScreen({
             setLoading(false);
             return;
           }
-        } catch (err) {
-          console.log("Web Contact Picker dismissed or error", err);
+        } catch (err: any) {
+          console.log("Web Contact Picker notice:", err?.message || "dismissed");
         }
+      } else if (!isTopFrame) {
+        setIframeNotice("Device contact sync requires the native ChatMe app or opening in a top-level browser tab (unavailable in iframe preview). You can add contacts manually using the '+ Add' button or quick phone search below.");
       }
 
       // Default sample contacts for browser preview / empty states
@@ -488,6 +495,25 @@ export function AddContactScreen({
 
       {/* Main Scroll Area */}
       <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden w-full px-4 py-4 space-y-4">
+
+        {/* Notice for preview / iframe environments */}
+        {iframeNotice && (
+          <div className={`p-3.5 rounded-2xl border flex items-start gap-3 text-xs leading-relaxed ${
+            dark ? "bg-emerald-950/20 border-emerald-800/40 text-emerald-200" : "bg-emerald-50/80 border-emerald-200 text-emerald-900"
+          }`}>
+            <Info size={18} className="text-[#25D366] shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <span className="font-semibold block mb-0.5">Device Contacts Notice</span>
+              <span>{iframeNotice}</span>
+            </div>
+            <button
+              onClick={() => setIframeNotice(null)}
+              className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+            >
+              <X size={14} />
+            </button>
+          </div>
+        )}
 
         {/* Direct Phone Lookup Box */}
         <div className={`p-4 rounded-2xl border ${dark ? "bg-gray-800/50 border-gray-800" : "bg-gray-50 border-gray-200/80"} shadow-sm`}>

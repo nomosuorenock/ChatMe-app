@@ -105,8 +105,9 @@ export async function loadDeviceContacts(): Promise<DeviceContactItem[]> {
     console.log("Capacitor native contact fetch error or unsupported:", nativeErr);
   }
 
-  // 2. Try Web Contacts Picker API
-  if (typeof navigator !== "undefined" && "contacts" in navigator && (navigator.contacts as any).select) {
+  // 2. Try Web Contacts Picker API (only available in top-level browsing contexts, forbidden in iframes)
+  const isTopFrame = typeof window !== "undefined" && window.self === window.top;
+  if (isTopFrame && typeof navigator !== "undefined" && "contacts" in navigator && typeof (navigator.contacts as any)?.select === "function") {
     try {
       const props = ["name", "tel", "email"];
       const imported = await (navigator.contacts as any).select(props, { multiple: true });
@@ -124,8 +125,9 @@ export async function loadDeviceContacts(): Promise<DeviceContactItem[]> {
         parsed.sort((a, b) => a.name.localeCompare(b.name));
         return parsed;
       }
-    } catch (webErr) {
-      console.log("Web contacts picker error:", webErr);
+    } catch (webErr: any) {
+      // Gracefully handle cancellation or top-frame restriction
+      console.log("Web contacts picker notice:", webErr?.message || "dismissed");
     }
   }
 

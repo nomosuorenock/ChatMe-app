@@ -203,14 +203,30 @@ create policy "Users can update own messages" on public.messages
   for update using (auth.uid() = sender_id);
 
 -- Status posts policies
-create policy "Status posts are viewable by everyone" on public.status_posts
-  for select using (true);
+create policy "Users can view status posts" on public.status_posts
+  for select using (
+    expires_at is null 
+    or expires_at > timezone('utc'::text, now()) 
+    or (auth.uid() is not null and auth.uid() = user_id)
+  );
 
-create policy "Users can create own status posts" on public.status_posts
-  for insert with check (auth.uid() = user_id);
+create policy "Users can insert own status posts" on public.status_posts
+  for insert with check (
+    auth.uid() is not null and auth.uid() = user_id
+  );
+
+create policy "Users can update own status posts" on public.status_posts
+  for update using (
+    auth.uid() is not null and (
+      auth.uid() = user_id or 
+      (expires_at is null or expires_at > timezone('utc'::text, now()))
+    )
+  );
 
 create policy "Users can delete own status posts" on public.status_posts
-  for delete using (auth.uid() = user_id);
+  for delete using (
+    auth.uid() is not null and auth.uid() = user_id
+  );
 
 -- Calls policies
 create policy "Users can view calls they participated in" on public.calls

@@ -7,7 +7,8 @@ import {
   HelpCircle, User, Users, Check, CheckCheck, Plus, Image as ImageIcon,
   X, Mail, Eye, EyeOff, ChevronRight, Upload, Loader2, Shield, KeyRound,
   Clock, Mic, RefreshCw, Play, Pause, Square, Volume2, Film, Trash2, Sparkles,
-  BookUser, UserPlus, Share2, CloudUpload, MessageSquare
+  BookUser, UserPlus, Share2, CloudUpload, MessageSquare, Copy, Megaphone, Pencil, Globe, Compass, Heart,
+  ZoomIn, ZoomOut, AlertCircle, Headphones, Download, ExternalLink
 } from "lucide-react";
 import { ContactsSelectionScreen } from "./components/ContactsSelectionScreen";
 import { GroupCreationScreen } from "./components/GroupCreationScreen";
@@ -17,9 +18,13 @@ import { AddContactScreen } from "./components/AddContactScreen";
 import { PrivacyScreen } from "./components/PrivacyScreen";
 import { BackupRestoreScreen } from "./components/BackupRestoreScreen";
 import { ChatsSettingsScreen } from "./components/ChatsSettingsScreen";
+import { LiveSupportScreen } from "./components/LiveSupportScreen";
+import { SupportAgentScreen } from "./components/SupportAgentScreen";
+import { HelpAndSupportScreen } from "./components/HelpAndSupportScreen";
 import { checkAndRunAutoBackup } from "./services/backupService";
 import { openPhoneDialer, shareContentViaAndroid } from "./services/permissionService";
 import { supabase } from "./lib/supabase";
+import chatMeLogoAsset from "./assets/images/chatme_logo_1786875847193.jpg";
 
 /* ------------------------------------------------------------------ */
 /*  Avatar helper                                                      */
@@ -29,6 +34,32 @@ export function getDefaultAvatar(name?: string) {
   const cleanName = (name || "User").trim();
   const encodedName = encodeURIComponent(cleanName);
   return `https://ui-avatars.com/api/?name=${encodedName}&background=22c55e&color=fff&bold=true`;
+}
+
+export function getLocalRegisteredUsers(): any[] {
+  try {
+    const raw = localStorage.getItem("chatme_registered_users");
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+export function saveLocalRegisteredUser(userObj: any) {
+  try {
+    const list = getLocalRegisteredUsers();
+    const idx = list.findIndex(
+      (u: any) =>
+        (u.email && userObj.email && u.email.toLowerCase() === userObj.email.toLowerCase()) ||
+        (u.id && userObj.id && u.id === userObj.id)
+    );
+    if (idx >= 0) {
+      list[idx] = { ...list[idx], ...userObj };
+    } else {
+      list.push(userObj);
+    }
+    localStorage.setItem("chatme_registered_users", JSON.stringify(list));
+  } catch (e) {}
 }
 
 export const cleanupExpiredStatuses = async () => {
@@ -56,51 +87,168 @@ export const filterFreshStatuses = (list: any[]) => {
 /*  Small shared UI pieces                                             */
 /* ------------------------------------------------------------------ */
 
-function Logo({ size = 64, dark = false }) {
+export function ChatMeSvgLogo({
+  size = 64,
+  className = "",
+  rounded = "rounded-2xl",
+  shadow = "shadow-md"
+}: {
+  size?: number;
+  className?: string;
+  rounded?: string;
+  shadow?: string;
+}) {
   return (
-    <div className="flex flex-col items-center gap-3">
-      <div
-        className="flex items-center justify-center rounded-xl bg-gradient-to-br from-green-500 to-blue-500 shadow-lg"
-        style={{ width: size, height: size }}
-      >
-        <MessageCircle color="white" size={size * 0.55} strokeWidth={2.2} />
-      </div>
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 100 100"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      className={`shrink-0 ${rounded} ${shadow} ${className}`}
+      style={{ width: size, height: size }}
+      aria-label="ChatMe"
+      role="img"
+    >
+      <defs>
+        <linearGradient id="chatme-gradient-bg" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#10B981" />
+          <stop offset="45%" stopColor="#059669" />
+          <stop offset="100%" stopColor="#047857" />
+        </linearGradient>
+        <linearGradient id="chatme-bubble-grad" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stopColor="#FFFFFF" />
+          <stop offset="100%" stopColor="#F0FDF4" />
+        </linearGradient>
+        <filter id="chatme-shadow" x="-20%" y="-20%" width="140%" height="140%">
+          <feDropShadow dx="0" dy="3" stdDeviation="4" floodOpacity="0.28" floodColor="#047857" />
+        </filter>
+      </defs>
+      {/* Background rounded squircle */}
+      <rect width="100" height="100" rx="22" fill="url(#chatme-gradient-bg)" />
+      {/* Glossy top-left soft highlight */}
+      <path
+        d="M 12 12 Q 50 4 88 12 Q 75 36 50 34 Q 25 36 12 12 Z"
+        fill="#FFFFFF"
+        fillOpacity="0.18"
+      />
+      {/* Main chat bubble */}
+      <path
+        d="M 50 24 C 34 24 21 35.5 21 49.5 C 21 54.8 22.8 59.8 25.8 63.8 L 23 75.5 L 35.2 72.2 C 39.6 74.2 44.6 75.5 50 75.5 C 66 75.5 79 64 79 49.5 C 79 35.5 66 24 50 24 Z"
+        fill="url(#chatme-bubble-grad)"
+        filter="url(#chatme-shadow)"
+      />
+      {/* Subtle bubble outline */}
+      <path
+        d="M 50 24 C 34 24 21 35.5 21 49.5 C 21 54.8 22.8 59.8 25.8 63.8 L 23 75.5 L 35.2 72.2 C 39.6 74.2 44.6 75.5 50 75.5 C 66 75.5 79 64 79 49.5 C 79 35.5 66 24 50 24 Z"
+        stroke="#E2E8F0"
+        strokeWidth="0.8"
+        fill="none"
+      />
+      {/* Three chat dots */}
+      <circle cx="39" cy="49.5" r="4.2" fill="#059669" />
+      <circle cx="50" cy="49.5" r="4.2" fill="#10B981" />
+      <circle cx="61" cy="49.5" r="4.2" fill="#047857" />
+    </svg>
+  );
+}
+
+function Logo({
+  size = 64,
+  dark = false,
+  className = "",
+  rounded = "rounded-2xl",
+  shadow = "shadow-xl"
+}: {
+  size?: number;
+  dark?: boolean;
+  className?: string;
+  rounded?: string;
+  shadow?: string;
+}) {
+  const [loadError, setLoadError] = useState(false);
+  const [candidateIndex, setCandidateIndex] = useState(0);
+
+  // Array of relative and local candidate paths for maximum resilience across
+  // AI Studio preview, Vercel production, and Android/Capacitor webviews:
+  const candidateSources = [
+    chatMeLogoAsset,
+    "./logo.png",
+    "/logo.png",
+    "./logo.jpg",
+    "/logo.jpg"
+  ];
+
+  const handleImageError = () => {
+    if (candidateIndex < candidateSources.length - 1) {
+      setCandidateIndex((prev) => prev + 1);
+    } else {
+      setLoadError(true);
+    }
+  };
+
+  return (
+    <div
+      className={`flex flex-col items-center justify-center shrink-0 ${className}`}
+      style={{ width: size, height: size }}
+    >
+      {!loadError ? (
+        <img
+          src={candidateSources[candidateIndex]}
+          alt="ChatMe"
+          referrerPolicy="no-referrer"
+          onError={handleImageError}
+          className={`w-full h-full object-cover ${rounded} ${shadow}`}
+          style={{ width: size, height: size }}
+        />
+      ) : (
+        <ChatMeSvgLogo size={size} rounded={rounded} shadow={shadow} />
+      )}
     </div>
   );
 }
 
-function TextField({ icon: Icon, type = "text", placeholder, value, onChange, error, rightElement, dark }) {
+function TextField({ icon: Icon, type = "text", placeholder, value, onChange, error, rightElement, dark }: any) {
   return (
     <div className="w-full">
       <div
-        className={`flex items-center gap-2 rounded-xl border px-3 py-3 ${
-          error ? "border-red-400" : dark ? "border-gray-700" : "border-gray-200"
-        } ${dark ? "bg-gray-800" : "bg-gray-50"}`}
+        className={`flex items-center gap-2.5 rounded-2xl border px-3.5 py-3 transition-all ${
+          error
+            ? "border-red-500 bg-red-950/20"
+            : dark
+            ? "border-slate-700/80 bg-slate-800/80 focus-within:border-emerald-500 focus-within:ring-2 focus-within:ring-emerald-500/20"
+            : "border-slate-200 bg-slate-50 focus-within:border-emerald-500 focus-within:ring-2 focus-within:ring-emerald-500/20"
+        }`}
       >
-        {Icon && <Icon size={18} className={dark ? "text-gray-400" : "text-gray-400"} />}
+        {Icon && <Icon size={18} className={dark ? "text-slate-400" : "text-slate-400"} />}
         <input
           type={type}
           value={value}
           onChange={onChange}
           placeholder={placeholder}
-          className={`flex-1 bg-transparent outline-none text-sm ${dark ? "text-white placeholder-gray-500" : "text-gray-800 placeholder-gray-400"}`}
+          className={`flex-1 bg-transparent outline-none text-sm ${
+            dark ? "text-white placeholder-slate-500" : "text-slate-900 placeholder-slate-400"
+          }`}
         />
         {rightElement}
       </div>
-      {error && <p className="mt-1 text-xs text-red-500 pl-1">{error}</p>}
+      {error && <p className="mt-1.5 text-xs text-red-400 pl-1 font-medium">{error}</p>}
     </div>
   );
 }
 
-function PrimaryButton({ children, onClick, color = "green", disabled, type = "button" }) {
-  const bg = color === "green" ? "bg-green-500 active:bg-green-600" : "bg-blue-500 active:bg-blue-600";
+function PrimaryButton({ children, onClick, color = "green", disabled, type = "button" }: any) {
+  const bg =
+    color === "green"
+      ? "bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 hover:from-emerald-600 hover:to-cyan-600 active:scale-[0.98] shadow-emerald-500/25 text-white"
+      : "bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 active:scale-[0.98] shadow-blue-500/25 text-white";
   return (
     <button
       type={type}
       onClick={onClick}
       disabled={disabled}
-      className={`w-full rounded-xl py-3.5 text-white font-semibold text-sm shadow-md transition-colors ${bg} ${
-        disabled ? "opacity-50" : ""
+      className={`w-full rounded-2xl py-3.5 font-bold text-sm shadow-lg transition-all flex items-center justify-center gap-2 ${bg} ${
+        disabled ? "opacity-50 cursor-not-allowed" : ""
       }`}
     >
       {children}
@@ -108,11 +256,12 @@ function PrimaryButton({ children, onClick, color = "green", disabled, type = "b
   );
 }
 
-function Toast({ message }) {
+function Toast({ message }: { message?: string | null }) {
   if (!message) return null;
   return (
-    <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-gray-900 text-white text-xs px-4 py-2 rounded-xl shadow-lg">
-      {message}
+    <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-[#0F172A] border border-slate-700 text-white text-xs px-4 py-2.5 rounded-2xl shadow-2xl flex items-center gap-2 animate-in fade-in slide-in-from-top-2">
+      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+      <span>{message}</span>
     </div>
   );
 }
@@ -121,25 +270,38 @@ function Toast({ message }) {
 /*  Screens: Auth                                                      */
 /* ------------------------------------------------------------------ */
 
-function SplashScreen({ dark }) {
+function SplashScreen({ dark }: { dark?: boolean }) {
   return (
-    <div className={`flex flex-col items-center justify-center h-full gap-4 ${dark ? "bg-gray-900" : "bg-white"}`}>
-      <Logo size={88} />
-      <h1 className={`text-2xl font-bold ${dark ? "text-white" : "text-gray-900"}`}>ChatMe</h1>
-      <Loader2 className="animate-spin text-green-500 mt-6" size={26} />
+    <div className="flex flex-col items-center justify-center h-full gap-5 bg-[#0B101B] text-white">
+      <div className="relative">
+        <div className="absolute -inset-4 bg-emerald-500/20 rounded-full blur-xl animate-pulse" />
+        <Logo size={96} rounded="rounded-3xl" shadow="shadow-2xl shadow-emerald-500/30" />
+      </div>
+      <div className="flex flex-col items-center mt-2">
+        <h1 className="text-3xl font-black tracking-tight bg-gradient-to-r from-white via-slate-100 to-slate-300 bg-clip-text text-transparent">
+          ChatMe
+        </h1>
+        <p className="text-xs font-semibold tracking-widest text-emerald-400 mt-1 uppercase">
+          Connect • Chat • Share
+        </p>
+      </div>
+      <Loader2 className="animate-spin text-emerald-400 mt-6" size={28} />
     </div>
   );
 }
 
 function SignUpScreen({ onSignUp, goSignIn, dark }: any) {
   const [fullname, setFullname] = useState("");
+  const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
-  const [photo, setPhoto] = useState(null);
+  const [photo, setPhoto] = useState<string | null>(null);
   const [showPw, setShowPw] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<any>({});
+  const [serverErrorDetails, setServerErrorDetails] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const handlePhoto = (e: any) => {
@@ -147,87 +309,138 @@ function SignUpScreen({ onSignUp, goSignIn, dark }: any) {
     if (file) setPhoto(URL.createObjectURL(file));
   };
 
-  const submit = () => {
+  const submit = async () => {
+    setServerErrorDetails(null);
     const errs: any = {};
     if (!fullname.trim()) errs.fullname = "Full name is required";
     if (!email.trim()) errs.email = "Email is required";
-    else if (!/^\S+@\S+\.\S+$/.test(email)) errs.email = "Enter a valid email";
+    else if (!/^\S+@\S+\.\S+$/.test(email.trim())) errs.email = "Enter a valid email address";
     if (!password) errs.password = "Password is required";
     else if (password.length < 6) errs.password = "Use at least 6 characters";
     if (confirm !== password) errs.confirm = "Passwords do not match";
     setErrors(errs);
     if (Object.keys(errs).length === 0) {
-      onSignUp({ fullname: fullname.trim(), email: email.trim(), phone: phone.trim(), password, photo, bio: "" });
+      setLoading(true);
+      try {
+        const cleanEmail = email.trim().toLowerCase();
+        const derivedUsername = (username.trim() || cleanEmail.split('@')[0] || 'user')
+          .toLowerCase()
+          .replace(/[^a-z0-9_]/g, '');
+
+        await onSignUp({
+          fullname: fullname.trim(),
+          username: derivedUsername,
+          email: cleanEmail,
+          phone: phone.trim(),
+          password,
+          photo,
+          bio: ""
+        });
+      } catch (error: any) {
+        console.warn('Signup notice:', error?.message || error);
+        const errorMessage =
+          error?.message ||
+          "Could not complete registration. Please check your information and try again.";
+        setServerErrorDetails(errorMessage);
+      } finally {
+        setLoading(false);
+      }
     }
   };
 
   return (
-    <div className={`h-full w-full overflow-y-auto px-6 py-8 flex flex-col items-center justify-center ${dark ? "bg-gray-900" : "bg-white"}`}>
-      <div className="w-full max-w-md my-auto">
+    <div className="h-full w-full overflow-y-auto px-6 py-8 flex flex-col items-center justify-center bg-[#0B101B] text-white">
+      <div className="w-full max-w-sm my-auto">
         <div className="flex flex-col items-center mb-6">
-          <Logo size={56} />
-          <h1 className={`text-xl font-bold mt-4 ${dark ? "text-white" : "text-gray-900"}`}>Create Account</h1>
-          <p className="text-sm text-gray-400 mt-1">Join ChatMe today</p>
+          <Logo size={68} rounded="rounded-2xl" shadow="shadow-2xl shadow-emerald-500/20" />
+          <div className="mt-3 flex items-center gap-1.5">
+            <span className="text-2xl font-black tracking-tight bg-gradient-to-r from-emerald-400 via-teal-300 to-cyan-400 bg-clip-text text-transparent">
+              ChatMe
+            </span>
+          </div>
+          <h1 className="text-2xl font-extrabold mt-3 text-white">Create Account</h1>
+          <p className="text-sm text-slate-400 mt-1">Join ChatMe today</p>
         </div>
 
-        <div className="flex flex-col items-center mb-5">
-          <button
-            onClick={() => fileRef.current?.click()}
-            className="w-20 h-20 rounded-xl bg-gray-100 border-2 border-dashed border-gray-300 flex items-center justify-center overflow-hidden"
-          >
-            {photo ? (
-              <img src={photo} alt="profile" className="w-full h-full object-cover" />
-            ) : (
-              <Upload size={22} className="text-gray-400" />
-            )}
-          </button>
-          <input type="file" accept="image/*" ref={fileRef} onChange={handlePhoto} className="hidden" />
-          <span className="text-xs text-green-600 font-medium mt-2">Upload Profile Photo</span>
+        {serverErrorDetails && (
+          <div className="p-3.5 mb-4 rounded-2xl bg-red-950/40 text-red-400 text-xs border border-red-800/60 font-sans break-words leading-relaxed">
+            <div className="font-semibold mb-1 flex items-center justify-between">
+              <span>REGISTRATION NOTICE:</span>
+              <button type="button" onClick={() => setServerErrorDetails(null)} className="text-red-400 hover:text-red-300">✕</button>
+            </div>
+            <div>{serverErrorDetails}</div>
+          </div>
+        )}
+
+        <div className="bg-slate-900/80 border border-slate-800 rounded-3xl p-6 shadow-2xl backdrop-blur-md">
+          <div className="flex flex-col items-center mb-5">
+            <button
+              type="button"
+              onClick={() => fileRef.current?.click()}
+              className="w-20 h-20 rounded-full bg-slate-800 border-2 border-dashed border-slate-600 hover:border-emerald-400 flex items-center justify-center overflow-hidden transition-colors relative group"
+            >
+              {photo ? (
+                <img src={photo} alt="profile" className="w-full h-full object-cover" />
+              ) : (
+                <div className="flex flex-col items-center gap-1">
+                  <Upload size={20} className="text-slate-400 group-hover:text-emerald-400 transition-colors" />
+                  <span className="text-[10px] text-slate-400">Photo</span>
+                </div>
+              )}
+            </button>
+            <input type="file" accept="image/*" ref={fileRef} onChange={handlePhoto} className="hidden" />
+            <span className="text-xs text-emerald-400 font-medium mt-2">Upload Profile Photo</span>
+          </div>
+
+          <div className="flex flex-col gap-3">
+            <TextField icon={User} placeholder="Full Name" value={fullname} onChange={(e: any) => setFullname(e.target.value)} error={errors.fullname} dark={true} />
+            <TextField icon={User} placeholder="Username (optional)" value={username} onChange={(e: any) => setUsername(e.target.value)} error={errors.username} dark={true} />
+            <TextField icon={Mail} placeholder="Email" value={email} onChange={(e: any) => setEmail(e.target.value)} error={errors.email} dark={true} />
+            <TextField icon={Phone} placeholder="Phone Number (e.g. +1 555-0199)" value={phone} onChange={(e: any) => setPhone(e.target.value)} dark={true} />
+            <TextField
+              icon={Lock}
+              type={showPw ? "text" : "password"}
+              placeholder="Password (min 6 characters)"
+              value={password}
+              onChange={(e: any) => setPassword(e.target.value)}
+              error={errors.password}
+              dark={true}
+              rightElement={
+                <button type="button" onClick={() => setShowPw((s) => !s)} className="p-1 text-slate-400 hover:text-white">
+                  {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              }
+            />
+            <TextField
+              icon={Lock}
+              type={showPw ? "text" : "password"}
+              placeholder="Confirm Password"
+              value={confirm}
+              onChange={(e: any) => setConfirm(e.target.value)}
+              error={errors.confirm}
+              dark={true}
+            />
+          </div>
+
+          <div className="mt-6">
+            <PrimaryButton onClick={submit} color="green" disabled={loading}>
+              {loading ? "Creating Account..." : "Sign Up"}
+            </PrimaryButton>
+          </div>
         </div>
 
-        <div className="flex flex-col gap-3">
-          <TextField icon={User} placeholder="Full Name" value={fullname} onChange={(e) => setFullname(e.target.value)} error={errors.fullname} dark={dark} />
-          <TextField icon={Mail} placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} error={errors.email} dark={dark} />
-          <TextField icon={Phone} placeholder="Phone Number (e.g. +1 555-0199)" value={phone} onChange={(e) => setPhone(e.target.value)} dark={dark} />
-          <TextField
-            icon={Lock}
-            type={showPw ? "text" : "password"}
-            placeholder="Password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            error={errors.password}
-            dark={dark}
-            rightElement={
-              <button type="button" onClick={() => setShowPw((s) => !s)}>
-                {showPw ? <EyeOff size={16} className="text-gray-400" /> : <Eye size={16} className="text-gray-400" />}
-              </button>
-            }
-          />
-          <TextField
-            icon={Lock}
-            type={showPw ? "text" : "password"}
-            placeholder="Confirm Password"
-            value={confirm}
-            onChange={(e) => setConfirm(e.target.value)}
-            error={errors.confirm}
-            dark={dark}
-          />
-        </div>
-
-        <div className="mt-6">
-          <PrimaryButton onClick={submit} color="green">Sign Up</PrimaryButton>
-        </div>
-
-        <p className={`text-center text-sm mt-5 ${dark ? "text-gray-400" : "text-gray-500"}`}>
+        <p className="text-center text-sm mt-6 text-slate-400">
           Already have an account?{" "}
-          <button onClick={goSignIn} className="text-blue-500 font-semibold">Sign In</button>
+          <button onClick={goSignIn} className="text-emerald-400 hover:text-emerald-300 font-bold transition-colors">
+            Sign In
+          </button>
         </p>
       </div>
     </div>
   );
 }
 
-function SignInScreen({ onSignIn, goSignUp, goReset, dark }) {
+function SignInScreen({ onSignIn, goSignUp, goReset, dark }: any) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
@@ -243,50 +456,70 @@ function SignInScreen({ onSignIn, goSignUp, goReset, dark }) {
   };
 
   return (
-    <div className={`h-full w-full overflow-y-auto px-6 py-10 flex flex-col items-center justify-center ${dark ? "bg-gray-900" : "bg-white"}`}>
-      <div className="w-full max-w-md my-auto">
+    <div className="h-full w-full overflow-y-auto px-6 py-10 flex flex-col items-center justify-center bg-[#0B101B] text-white">
+      <div className="w-full max-w-sm my-auto">
         <div className="flex flex-col items-center mb-8">
-          <Logo size={64} />
-          <h1 className={`text-xl font-bold mt-4 ${dark ? "text-white" : "text-gray-900"}`}>Welcome Back</h1>
-          <p className="text-sm text-gray-400 mt-1">Sign in to continue</p>
+          <Logo size={76} rounded="rounded-2xl" shadow="shadow-2xl shadow-emerald-500/20" />
+          <div className="mt-3.5 flex items-center gap-1.5">
+            <span className="text-2xl font-black tracking-tight bg-gradient-to-r from-emerald-400 via-teal-300 to-cyan-400 bg-clip-text text-transparent">
+              ChatMe
+            </span>
+          </div>
+          <h1 className="text-2xl font-extrabold mt-4 text-white">Welcome Back</h1>
+          <p className="text-sm text-slate-400 mt-1">Sign in to continue</p>
         </div>
 
-        <div className="flex flex-col gap-3">
-          <TextField icon={Mail} placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} dark={dark} />
-          <TextField
-            icon={Lock}
-            type={showPw ? "text" : "password"}
-            placeholder="Password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            dark={dark}
-            rightElement={
-              <button type="button" onClick={() => setShowPw((s) => !s)}>
-                {showPw ? <EyeOff size={16} className="text-gray-400" /> : <Eye size={16} className="text-gray-400" />}
-              </button>
-            }
-          />
-          {error && <p className="text-xs text-red-500 pl-1">{error}</p>}
+        <div className="bg-slate-900/80 border border-slate-800 rounded-3xl p-6 shadow-2xl backdrop-blur-md">
+          <div className="flex flex-col gap-3.5">
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 mb-1.5 pl-1">Email address</label>
+              <TextField icon={Mail} placeholder="name@example.com" value={email} onChange={(e: any) => setEmail(e.target.value)} dark={true} />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 mb-1.5 pl-1">Password</label>
+              <TextField
+                icon={Lock}
+                type={showPw ? "text" : "password"}
+                placeholder="Enter password"
+                value={password}
+                onChange={(e: any) => setPassword(e.target.value)}
+                dark={true}
+                rightElement={
+                  <button type="button" onClick={() => setShowPw((s) => !s)} className="p-1 text-slate-400 hover:text-white">
+                    {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                }
+              />
+            </div>
+            {error && <p className="text-xs text-red-400 pl-1 font-medium">{error}</p>}
+          </div>
+
+          <div className="flex justify-end mt-2.5">
+            <button onClick={goReset} className="text-xs text-emerald-400 hover:text-emerald-300 font-semibold transition-colors">
+              Forgot Password?
+            </button>
+          </div>
+
+          <div className="mt-6">
+            <PrimaryButton onClick={submit} color="green">
+              Sign In
+            </PrimaryButton>
+          </div>
         </div>
 
-        <div className="flex justify-end mt-2">
-          <button onClick={goReset} className="text-xs text-blue-500 font-medium">Forgot Password?</button>
-        </div>
-
-        <div className="mt-6">
-          <PrimaryButton onClick={submit} color="blue">Sign In</PrimaryButton>
-        </div>
-
-        <p className={`text-center text-sm mt-5 ${dark ? "text-gray-400" : "text-gray-500"}`}>
+        <p className="text-center text-sm mt-6 text-slate-400">
           Don't have an account?{" "}
-          <button onClick={goSignUp} className="text-green-600 font-semibold">Sign Up</button>
+          <button onClick={goSignUp} className="text-emerald-400 hover:text-emerald-300 font-bold transition-colors">
+            Sign Up
+          </button>
         </p>
       </div>
     </div>
   );
 }
 
-function ResetPasswordScreen({ goSignIn, onReset, dark }) {
+function ResetPasswordScreen({ goSignIn, onReset, dark }: any) {
   const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);
 
@@ -298,32 +531,45 @@ function ResetPasswordScreen({ goSignIn, onReset, dark }) {
   };
 
   return (
-    <div className={`h-full w-full overflow-y-auto px-6 py-10 flex flex-col items-center justify-center ${dark ? "bg-gray-900" : "bg-white"}`}>
-      <div className="w-full max-w-md my-auto">
+    <div className="h-full w-full overflow-y-auto px-6 py-10 flex flex-col items-center justify-center bg-[#0B101B] text-white">
+      <div className="w-full max-w-sm my-auto">
         <div className="flex flex-col items-center mb-8">
-          <Logo size={56} />
-          <h1 className={`text-xl font-bold mt-4 ${dark ? "text-white" : "text-gray-900"}`}>Reset Password</h1>
-          <p className="text-sm text-gray-400 mt-1 text-center">Enter your email and we'll send you a reset link</p>
+          <Logo size={68} rounded="rounded-2xl" shadow="shadow-2xl shadow-emerald-500/20" />
+          <div className="mt-3 flex items-center gap-1.5">
+            <span className="text-2xl font-black tracking-tight bg-gradient-to-r from-emerald-400 via-teal-300 to-cyan-400 bg-clip-text text-transparent">
+              ChatMe
+            </span>
+          </div>
+          <h1 className="text-2xl font-extrabold mt-3 text-white">Reset Password</h1>
+          <p className="text-sm text-slate-400 mt-1 text-center">Enter your email and we'll send you a reset link</p>
         </div>
 
-        {sent ? (
-          <div className="text-center">
-            <div className="w-14 h-14 rounded-xl bg-green-100 flex items-center justify-center mx-auto mb-3">
-              <Check className="text-green-500" size={26} />
+        <div className="bg-slate-900/80 border border-slate-800 rounded-3xl p-6 shadow-2xl backdrop-blur-md">
+          {sent ? (
+            <div className="text-center py-4">
+              <div className="w-14 h-14 rounded-2xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto mb-3 shadow-lg">
+                <Check size={28} strokeWidth={2.5} />
+              </div>
+              <p className="text-sm text-slate-200">Reset link sent to <span className="font-semibold text-emerald-400">{email}</span></p>
+              <p className="text-xs text-slate-400 mt-2">Check your inbox or spam folder for password recovery instructions.</p>
             </div>
-            <p className={`text-sm ${dark ? "text-gray-300" : "text-gray-600"}`}>Reset link sent to {email}</p>
-          </div>
-        ) : (
-          <>
-            <TextField icon={Mail} placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} dark={dark} />
-            <div className="mt-6">
-              <PrimaryButton onClick={submit} color="green">Send Reset Link</PrimaryButton>
-            </div>
-          </>
-        )}
+          ) : (
+            <>
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5 pl-1">Email address</label>
+                <TextField icon={Mail} placeholder="name@example.com" value={email} onChange={(e: any) => setEmail(e.target.value)} dark={true} />
+              </div>
+              <div className="mt-6">
+                <PrimaryButton onClick={submit} color="green">Send Reset Link</PrimaryButton>
+              </div>
+            </>
+          )}
+        </div>
 
-        <p className="text-center text-sm mt-6">
-          <button onClick={goSignIn} className="text-blue-500 font-semibold">Back to Sign In</button>
+        <p className="text-center text-sm mt-6 text-slate-400">
+          <button onClick={goSignIn} className="text-emerald-400 hover:text-emerald-300 font-bold transition-colors">
+            Back to Sign In
+          </button>
         </p>
       </div>
     </div>
@@ -335,88 +581,282 @@ function ResetPasswordScreen({ goSignIn, onReset, dark }) {
 /* ------------------------------------------------------------------ */
 
 function BottomNav({ active, onChange, dark }: { active: string; onChange: (key: string) => void; dark: boolean }) {
-  const leftItems = [
+  const items = [
     { key: "chats", label: "Chats", icon: MessageCircle },
     { key: "updates", label: "Updates", icon: RefreshCw },
     { key: "contacts", label: "Contacts", icon: Users },
-  ];
-
-  const rightItems = [
-    { key: "calls", label: "Calls", icon: Phone },
-    { key: "ai", label: "Assistant", icon: Sparkles },
     { key: "profile", label: "Profile", icon: User },
   ];
 
   return (
-    <div
-      className={`w-full shrink-0 flex items-center justify-around border-t px-2 py-1 relative z-20 ${
-        dark ? "bg-gray-900 border-gray-800 text-white" : "bg-white border-gray-100 text-gray-900"
-      }`}
-      style={{ paddingBottom: "max(4px, env(safe-area-inset-bottom, 0px))" }}
+    <nav
+      className="fixed bottom-0 left-0 right-0 lg:left-1/2 lg:-translate-x-1/2 lg:max-w-md xl:max-w-lg z-30 border-t border-slate-800/80 bg-[#0B101B]/95 backdrop-blur-md text-white flex items-center justify-around px-2 py-2 shadow-2xl"
+      style={{
+        paddingBottom: "max(10px, env(safe-area-inset-bottom, 0px))",
+      }}
     >
-      {leftItems.map(({ key, label, icon: Icon }) => {
+      {items.map(({ key, label, icon: Icon }) => {
         const isActive = active === key;
         return (
           <button
             key={key}
             onClick={() => onChange(key)}
-            className="flex-1 flex flex-col items-center gap-0.5 py-1.5 transition hover:opacity-80"
+            className={`flex-1 flex flex-col items-center justify-center gap-1 py-1 px-1 rounded-2xl transition-all duration-150 active:scale-95 ${
+              isActive
+                ? "text-emerald-400 font-bold"
+                : "text-slate-400 hover:text-slate-200 font-medium"
+            }`}
           >
-            <Icon size={20} className={isActive ? "text-[#25D366]" : "text-gray-400"} strokeWidth={isActive ? 2.5 : 2} />
-            <span className={`text-[10px] font-medium ${isActive ? "text-[#25D366]" : "text-gray-400"}`}>{label}</span>
+            <div className={`p-1.5 rounded-xl transition-all ${isActive ? "bg-emerald-500/15" : "bg-transparent"}`}>
+              <Icon size={21} strokeWidth={isActive ? 2.5 : 2} />
+            </div>
+            <span className={`text-[11px] tracking-tight ${isActive ? "text-emerald-400" : "text-slate-400"}`}>
+              {label}
+            </span>
           </button>
         );
       })}
-
-      {/* Center + Button */}
-      <div className="flex flex-col items-center justify-center -mt-5 px-1 z-10">
-        <button
-          onClick={() => onChange("add-contact")}
-          title="Add Contact / Device Contacts"
-          className="w-12 h-12 rounded-full bg-[#25D366] text-white flex items-center justify-center shadow-lg hover:bg-[#20bd5a] active:scale-95 transition-all border-4 border-white dark:border-gray-900"
-        >
-          <Plus size={26} strokeWidth={2.8} />
-        </button>
-        <span className={`text-[10px] font-bold mt-0.5 ${active === "add-contact" ? "text-[#25D366]" : "text-gray-400"}`}>Add</span>
-      </div>
-
-      {rightItems.map(({ key, label, icon: Icon }) => {
-        const isActive = active === key;
-        return (
-          <button
-            key={key}
-            onClick={() => onChange(key)}
-            className="flex-1 flex flex-col items-center gap-0.5 py-1.5 transition hover:opacity-80"
-          >
-            <Icon size={20} className={isActive ? "text-[#25D366]" : "text-gray-400"} strokeWidth={isActive ? 2.5 : 2} />
-            <span className={`text-[10px] font-medium ${isActive ? "text-[#25D366]" : "text-gray-400"}`}>{label}</span>
-          </button>
-        );
-      })}
-    </div>
+    </nav>
   );
 }
 
-function ScreenHeader({ title, onBack, dark, right }) {
+function ScreenHeader({ title, onBack, dark, right, subtitle }: any) {
   return (
-    <div className={`flex items-center gap-3 px-4 py-4 border-b ${dark ? "bg-gray-900 border-gray-800" : "bg-white border-gray-100"}`}>
+    <div className="flex items-center gap-3 px-4 py-3.5 border-b bg-[#0B101B] border-slate-800/80 text-white shrink-0 sticky top-0 z-20 shadow-sm">
       {onBack && (
-        <button onClick={onBack}>
-          <ArrowLeft size={20} className={dark ? "text-white" : "text-gray-700"} />
+        <button
+          onClick={onBack}
+          className="p-1.5 -ml-1 rounded-xl text-slate-300 hover:text-white hover:bg-white/10 active:bg-white/20 transition-colors"
+          aria-label="Back"
+        >
+          <ArrowLeft size={20} />
         </button>
       )}
-      <h1 className={`text-base font-bold flex-1 ${dark ? "text-white" : "text-gray-900"}`}>{title}</h1>
+      <div className="flex-1 min-w-0">
+        <h1 className="text-base font-bold text-white truncate">{title}</h1>
+        {subtitle && <p className="text-xs text-slate-400 truncate">{subtitle}</p>}
+      </div>
       {right}
     </div>
   );
 }
 
-function StatusViewScreen({ status, currentUser, onBack, dark, onDelete, onReply }) {
+function isMediaUrl(str?: string) {
+  if (!str || typeof str !== "string") return false;
+  const s = str.trim().toLowerCase();
+  return (
+    s.startsWith("http://") ||
+    s.startsWith("https://") ||
+    s.startsWith("blob:") ||
+    s.startsWith("data:") ||
+    s.includes("supabase") ||
+    s.includes("storage/v1")
+  );
+}
+
+function getValidMediaUrl(url?: string): string | null {
+  if (!url || typeof url !== "string") return null;
+  const trimmed = url.trim();
+  if (trimmed.startsWith("blob:")) return null; // Never display a blob: URL from database!
+  if (trimmed.startsWith("http://") || trimmed.startsWith("https://") || trimmed.startsWith("data:")) {
+    return trimmed;
+  }
+  return null;
+}
+
+function formatStatusTime(createdAtStr?: string): string {
+  if (!createdAtStr) return "";
+  const d = new Date(createdAtStr);
+  if (isNaN(d.getTime())) return "";
+  const now = new Date();
+  const diffMs = now.getTime() - d.getTime();
+  const diffMins = Math.floor(diffMs / (1000 * 60));
+  if (diffMins < 1) return "Just now";
+  if (diffMins < 60) return `${diffMins}m ago`;
+  const diffHours = Math.floor(diffMins / 60);
+  if (diffHours < 24) return `${diffHours}h ago`;
+  return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+}
+
+function cleanStatusCaption(caption?: string) {
+  if (caption && !isMediaUrl(caption)) {
+    return caption;
+  }
+  return "";
+}
+
+function StatusViewScreen({ status, currentUser, onBack, dark, onDelete, onReply, showToast }: any) {
   const [isPlaying, setIsPlaying] = useState(true);
   const [isHolding, setIsHolding] = useState(false);
   const [progress, setProgress] = useState(0);
-  const [viewers, setViewers] = useState<any[]>(status.viewers || ["Alice", "Bob"]);
+  const [mediaError, setMediaError] = useState(false);
+  const [viewers, setViewers] = useState<any[]>(status?.viewers || ["Alice", "Bob"]);
   const [replyText, setReplyText] = useState("");
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
+  const [copiedCaption, setCopiedCaption] = useState(false);
+  const [copiedMediaUrl, setCopiedMediaUrl] = useState(false);
+  const [reactions, setReactions] = useState<Array<{
+    id: string;
+    emoji: string;
+    left: number;
+    size: number;
+    duration: number;
+    delay: number;
+    drift: number;
+  }>>([]);
+
+  const [timeRemaining, setTimeRemaining] = useState<string>("");
+
+  // Pinch-to-zoom state for image status
+  const [zoomScale, setZoomScale] = useState(1);
+  const [zoomOffset, setZoomOffset] = useState({ x: 0, y: 0 });
+
+  const touchStartDistRef = useRef<number | null>(null);
+  const initialScaleRef = useRef<number>(1);
+  const touchStartPosRef = useRef<{ x: number; y: number } | null>(null);
+  const initialOffsetRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const lastTapRef = useRef<number>(0);
+
+  useEffect(() => {
+    setZoomScale(1);
+    setZoomOffset({ x: 0, y: 0 });
+  }, [status]);
+
+  const resetZoom = () => {
+    setZoomScale(1);
+    setZoomOffset({ x: 0, y: 0 });
+    setIsHolding(false);
+  };
+
+  const handlePinchTouchStart = (e: React.TouchEvent) => {
+    if (e.touches.length === 2) {
+      const d = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY
+      );
+      touchStartDistRef.current = d;
+      initialScaleRef.current = zoomScale;
+      initialOffsetRef.current = { ...zoomOffset };
+      setIsHolding(true);
+    } else if (e.touches.length === 1) {
+      const touch = e.touches[0];
+      touchStartPosRef.current = { x: touch.clientX, y: touch.clientY };
+      initialOffsetRef.current = { ...zoomOffset };
+
+      const now = Date.now();
+      if (now - lastTapRef.current < 280) {
+        if (zoomScale > 1.05) {
+          resetZoom();
+        } else {
+          setZoomScale(2.5);
+          setZoomOffset({ x: 0, y: 0 });
+          setIsHolding(true);
+        }
+      } else {
+        if (zoomScale > 1.05) {
+          setIsHolding(true);
+        }
+      }
+      lastTapRef.current = now;
+    }
+  };
+
+  const handlePinchTouchMove = (e: React.TouchEvent) => {
+    if (e.touches.length === 2 && touchStartDistRef.current !== null) {
+      const d = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY
+      );
+      const scaleFactor = d / touchStartDistRef.current;
+      const nextScale = Math.min(Math.max(1, initialScaleRef.current * scaleFactor), 4);
+      setZoomScale(nextScale);
+      if (nextScale <= 1) {
+        setZoomOffset({ x: 0, y: 0 });
+      }
+    } else if (e.touches.length === 1 && zoomScale > 1.05 && touchStartPosRef.current) {
+      const dx = e.touches[0].clientX - touchStartPosRef.current.x;
+      const dy = e.touches[0].clientY - touchStartPosRef.current.y;
+      setZoomOffset({
+        x: initialOffsetRef.current.x + dx,
+        y: initialOffsetRef.current.y + dy,
+      });
+    }
+  };
+
+  const handlePinchTouchEnd = (e: React.TouchEvent) => {
+    if (e.touches.length < 2) {
+      touchStartDistRef.current = null;
+    }
+    if (e.touches.length === 0) {
+      touchStartPosRef.current = null;
+      if (zoomScale <= 1.05) {
+        resetZoom();
+      }
+    }
+  };
+
+  useEffect(() => {
+    const updateCountdown = () => {
+      const createdAtMs = status?.created_at ? new Date(status.created_at).getTime() : Date.now();
+      const expiresAtMs = status?.expires_at ? new Date(status.expires_at).getTime() : createdAtMs + 24 * 60 * 60 * 1000;
+      const diffMs = expiresAtMs - Date.now();
+
+      if (diffMs <= 0) {
+        setTimeRemaining("Expired");
+        return;
+      }
+
+      const hours = Math.floor(diffMs / (1000 * 60 * 60));
+      const mins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+      const secs = Math.floor((diffMs % (1000 * 60)) / 1000);
+
+      if (hours > 0) {
+        setTimeRemaining(`${hours}h ${mins}m left`);
+      } else if (mins > 0) {
+        setTimeRemaining(`${mins}m ${secs}s left`);
+      } else {
+        setTimeRemaining(`${secs}s left`);
+      }
+    };
+
+    updateCountdown();
+    const interval = setInterval(updateCountdown, 1000);
+    return () => clearInterval(interval);
+  }, [status]);
+
+  const triggerReaction = (emoji: string) => {
+    const newParticles = Array.from({ length: 14 }).map((_, i) => ({
+      id: `${Date.now()}-${i}-${Math.random()}`,
+      emoji,
+      left: Math.floor(Math.random() * 76) + 12,
+      size: Math.floor(Math.random() * 22) + 30,
+      duration: 1.5 + Math.random() * 1.1,
+      delay: i * 0.05,
+      drift: (Math.random() - 0.5) * 70,
+    }));
+
+    setReactions((prev) => [...prev, ...newParticles]);
+
+    if (onReply) {
+      onReply(status.user_id, emoji);
+    }
+
+    setTimeout(() => {
+      setReactions((prev) => prev.filter((r) => !newParticles.some((np) => np.id === r.id)));
+    }, 3200);
+  };
+
+  if (!status) {
+    return (
+      <div className="flex flex-col h-full bg-gray-950 text-white items-center justify-center p-6 text-center gap-4">
+        <p className="text-gray-400 text-sm">Status update unavailable.</p>
+        <button onClick={onBack} className="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-sm font-semibold transition-all">
+          Back to Updates
+        </button>
+      </div>
+    );
+  }
 
   useEffect(() => {
     // Record view in supabase if available
@@ -439,7 +879,7 @@ function StatusViewScreen({ status, currentUser, onBack, dark, onDelete, onReply
 
   useEffect(() => {
     let timer: any;
-    if (isPlaying && !isHolding) {
+    if (isPlaying && !isHolding && !isShareModalOpen) {
       timer = setInterval(() => {
         setProgress((p) => {
           if (p >= 100) {
@@ -452,21 +892,157 @@ function StatusViewScreen({ status, currentUser, onBack, dark, onDelete, onReply
       }, 100);
     }
     return () => clearInterval(timer);
-  }, [isPlaying, isHolding, onBack]);
+  }, [isPlaying, isHolding, isShareModalOpen, onBack]);
 
   const isCreator = currentUser && status.user_id === currentUser.id;
+  const isImage = (status.media_type === "image" || (!status.media_type && isMediaUrl(status.media_url))) && !mediaError;
+  const isVideo = status.media_type === "video" && !mediaError;
+  const isVoice = status.media_type === "voice";
+  const isText = status.media_type === "text";
+  const validMediaUrl = getValidMediaUrl(status.media_url);
+  const cleanCaption = cleanStatusCaption(status.caption);
+  const statusDeepLink = `${window.location.origin}${window.location.pathname}#status-${status.id}`;
+
+  const handleShareClick = async (e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setIsHolding(true);
+
+    const authorName = status.user_name || "ChatMe User";
+    let shareTitle = `ChatMe Status from ${authorName}`;
+    let shareText = cleanCaption ? `"${cleanCaption}" — ${authorName} on ChatMe` : `Check out ${authorName}'s status update on ChatMe!`;
+
+    if (isImage) {
+      shareTitle = `Photo Status by ${authorName}`;
+      shareText = cleanCaption ? `📷 "${cleanCaption}" (ChatMe Photo Status)` : `📷 Check out ${authorName}'s photo status on ChatMe!`;
+    } else if (isVideo) {
+      shareTitle = `Video Status by ${authorName}`;
+      shareText = cleanCaption ? `🎥 "${cleanCaption}" (ChatMe Video Status)` : `🎥 Watch ${authorName}'s video status on ChatMe!`;
+    } else if (isVoice) {
+      shareTitle = `Voice Status by ${authorName}`;
+      shareText = `🎙️ Listen to ${authorName}'s voice status update on ChatMe!`;
+    } else if (isText) {
+      shareTitle = `Status by ${authorName}`;
+      shareText = `💬 "${cleanCaption || 'Status'}" — ${authorName} on ChatMe`;
+    }
+
+    if (typeof navigator !== "undefined" && navigator.share) {
+      try {
+        await navigator.share({
+          title: shareTitle,
+          text: shareText,
+          url: statusDeepLink,
+        });
+        if (showToast) showToast("Status shared successfully!");
+        setIsHolding(false);
+        return;
+      } catch (err: any) {
+        if (err?.name === "AbortError") {
+          setIsHolding(false);
+          return;
+        }
+      }
+    }
+
+    // Fallback: Copy link & open share options modal
+    try {
+      if (navigator.clipboard) {
+        await navigator.clipboard.writeText(statusDeepLink);
+        setCopiedLink(true);
+        setTimeout(() => setCopiedLink(false), 2500);
+        if (showToast) showToast("Status deep link copied to clipboard!");
+      }
+    } catch (err) {}
+
+    setIsShareModalOpen(true);
+  };
+
+  const copyDeepLink = async () => {
+    try {
+      if (navigator.clipboard) {
+        await navigator.clipboard.writeText(statusDeepLink);
+      } else {
+        const textarea = document.createElement("textarea");
+        textarea.value = statusDeepLink;
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand("copy");
+        document.body.removeChild(textarea);
+      }
+      setCopiedLink(true);
+      setTimeout(() => setCopiedLink(false), 2500);
+      if (showToast) showToast("Status deep link copied to clipboard!");
+    } catch (err) {
+      if (showToast) showToast("Failed to copy link");
+    }
+  };
+
+  const copyCaption = async () => {
+    if (!cleanCaption) return;
+    try {
+      if (navigator.clipboard) {
+        await navigator.clipboard.writeText(cleanCaption);
+      }
+      setCopiedCaption(true);
+      setTimeout(() => setCopiedCaption(false), 2500);
+      if (showToast) showToast("Caption copied to clipboard!");
+    } catch (err) {}
+  };
+
+  const copyMediaLink = async () => {
+    if (!validMediaUrl) return;
+    try {
+      if (navigator.clipboard) {
+        await navigator.clipboard.writeText(validMediaUrl);
+      }
+      setCopiedMediaUrl(true);
+      setTimeout(() => setCopiedMediaUrl(false), 2500);
+      if (showToast) showToast("Media link copied to clipboard!");
+    } catch (err) {}
+  };
+
+  const handleDownloadMedia = () => {
+    if (!validMediaUrl) return;
+    const a = document.createElement("a");
+    a.href = validMediaUrl;
+    a.download = `chatme_status_${status.id}.${isVideo ? "mp4" : "jpg"}`;
+    a.target = "_blank";
+    a.rel = "noopener noreferrer";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    if (showToast) showToast("Starting media download / open...");
+  };
 
   return (
     <div 
-      className="flex flex-col h-full bg-black text-white relative select-none"
-      onMouseDown={() => setIsHolding(true)}
-      onMouseUp={() => setIsHolding(false)}
-      onMouseLeave={() => setIsHolding(false)}
-      onTouchStart={() => setIsHolding(true)}
-      onTouchEnd={() => setIsHolding(false)}
+      className="flex flex-col h-full w-full bg-black text-white relative select-none overflow-hidden"
+      onMouseDown={() => { if (!isShareModalOpen) setIsHolding(true); }}
+      onMouseUp={() => { if (!isShareModalOpen) setIsHolding(false); }}
+      onMouseLeave={() => { if (!isShareModalOpen) setIsHolding(false); }}
+      onTouchStart={() => { if (!isShareModalOpen) setIsHolding(true); }}
+      onTouchEnd={() => { if (!isShareModalOpen) setIsHolding(false); }}
     >
+      {/* Floating Emoji Reactions Overlay */}
+      <div className="absolute inset-0 pointer-events-none z-30 overflow-hidden">
+        {reactions.map((r) => (
+          <div
+            key={r.id}
+            className="absolute bottom-20 animate-float-reaction select-none drop-shadow-2xl"
+            style={{
+              left: `${r.left}%`,
+              fontSize: `${r.size}px`,
+              animationDuration: `${r.duration}s`,
+              animationDelay: `${r.delay}s`,
+              transform: `translateX(${r.drift}px)`,
+            }}
+          >
+            {r.emoji}
+          </div>
+        ))}
+      </div>
+
       {/* Top progress bars */}
-      <div className="flex gap-1 p-2">
+      <div className="flex gap-1 p-2 pt-[max(0.5rem,env(safe-area-inset-top))]">
         <div className="flex-1 h-1 bg-gray-600 rounded-full overflow-hidden">
           <div className="h-full bg-white transition-all duration-100" style={{ width: `${progress}%` }} />
         </div>
@@ -474,24 +1050,42 @@ function StatusViewScreen({ status, currentUser, onBack, dark, onDelete, onReply
 
       {/* Header */}
       <div className="flex justify-between items-center px-4 py-2 bg-gradient-to-b from-black/80 to-transparent z-10">
-        <div className="flex items-center gap-3">
-          <button onClick={onBack} className="text-white">
+        <div className="flex items-center gap-3 min-w-0">
+          <button onClick={onBack} className="text-white p-1 hover:opacity-80">
             <ArrowLeft size={24} />
           </button>
-          <div className="w-10 h-10 rounded-full overflow-hidden bg-gray-700">
-            <img src={status.user_photo || getDefaultAvatar(status.user_name)} alt="avatar" className="w-full h-full object-cover" />
+          <div className="w-10 h-10 rounded-full overflow-hidden bg-gray-700 shrink-0">
+            <img src={status.user_photo || getDefaultAvatar(status.user_name)} alt="avatar" className="w-full h-full object-cover" onError={(e: any) => { e.target.src = getDefaultAvatar(status.user_name); }} />
           </div>
-          <div>
-            <p className="font-semibold text-sm">{status.user_name || "Contact"}</p>
-            <p className="text-xs text-gray-400">{new Date(status.created_at || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+          <div className="min-w-0 flex-1">
+            <p className="font-semibold text-sm truncate">{status.user_name || "Contact"}</p>
+            <div className="flex items-center gap-2 text-xs text-gray-400">
+              <span>{new Date(status.created_at || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+              <span>•</span>
+              {timeRemaining && (
+                <span className="inline-flex items-center gap-1 text-emerald-400 font-medium bg-emerald-950/70 px-2 py-0.5 rounded-full border border-emerald-500/30 text-[11px] shadow-sm">
+                  <Clock size={11} className="animate-pulse text-emerald-400 shrink-0" />
+                  {timeRemaining}
+                </span>
+              )}
+            </div>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <button onClick={() => setIsPlaying(!isPlaying)} className="p-2">
+        <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+          {/* Share Button */}
+          <button
+            onClick={handleShareClick}
+            className="p-2 text-white hover:text-emerald-400 hover:bg-white/10 active:scale-95 rounded-full transition-all cursor-pointer"
+            title="Share status"
+            aria-label="Share status"
+          >
+            <Share2 size={20} />
+          </button>
+          <button onClick={() => setIsPlaying(!isPlaying)} className="p-2 text-white hover:text-emerald-400 hover:bg-white/10 active:scale-95 rounded-full transition-all cursor-pointer">
             {isPlaying ? <Pause size={20} /> : <Play size={20} />}
           </button>
           {isCreator && (
-            <button onClick={() => { onDelete(status.id); onBack(); }} className="p-2 text-red-400">
+            <button onClick={() => { onDelete(status.id); onBack(); }} className="p-2 text-red-400 hover:bg-red-500/10 active:scale-95 rounded-full transition-all cursor-pointer">
               <Trash2 size={20} />
             </button>
           )}
@@ -499,30 +1093,86 @@ function StatusViewScreen({ status, currentUser, onBack, dark, onDelete, onReply
       </div>
 
       {/* Content Area */}
-      <div className="flex-1 flex items-center justify-center p-4 relative">
+      <div className="flex-1 flex items-center justify-center p-4 relative overflow-hidden">
         {/* Background audio if present */}
         {status.audio_url && (
           <audio src={status.audio_url} autoPlay loop />
         )}
 
-        {status.media_type === "image" && (
-          <img src={status.media_url} alt="Status" className="max-h-full max-w-full object-contain rounded-lg shadow-xl" />
-        )}
-        {status.media_type === "video" && (
-          <video src={status.media_url} controls autoPlay className="max-h-full max-w-full object-contain rounded-lg shadow-xl" />
-        )}
-        {status.media_type === "voice" && (
+        {status.media_type === "image" || (isImage && !mediaError) ? (
+          <div
+            className="relative w-full h-full flex items-center justify-center overflow-hidden touch-none"
+            onTouchStart={handlePinchTouchStart}
+            onTouchMove={handlePinchTouchMove}
+            onTouchEnd={handlePinchTouchEnd}
+            onWheel={(e) => {
+              if (e.deltaY < 0) {
+                setZoomScale((s) => Math.min(4, s + 0.3));
+                setIsHolding(true);
+              } else {
+                setZoomScale((s) => {
+                  const next = Math.max(1, s - 0.3);
+                  if (next <= 1) {
+                    setZoomOffset({ x: 0, y: 0 });
+                    setIsHolding(false);
+                  }
+                  return next;
+                });
+              }
+            }}
+          >
+            <img
+              src={status.media_url}
+              alt="Status update"
+              onError={() => setMediaError(true)}
+              className="max-h-full max-w-full object-contain rounded-lg shadow-xl transition-transform duration-75 ease-out select-none cursor-grab active:cursor-grabbing"
+              style={{
+                transform: `translate3d(${zoomOffset.x}px, ${zoomOffset.y}px, 0) scale(${zoomScale})`,
+                transformOrigin: "center center",
+              }}
+            />
+            {zoomScale > 1.05 && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  resetZoom();
+                }}
+                className="absolute top-3 right-3 bg-black/80 hover:bg-black text-emerald-400 border border-emerald-500/40 text-xs font-semibold px-3 py-1.5 rounded-full shadow-2xl z-20 flex items-center gap-1.5 transition active:scale-95 cursor-pointer backdrop-blur-md"
+              >
+                <ZoomOut size={14} />
+                <span>{zoomScale.toFixed(1)}x • Reset</span>
+              </button>
+            )}
+          </div>
+        ) : status.media_type === "video" && status.media_url && !mediaError ? (
+          <video
+            src={status.media_url}
+            controls
+            autoPlay
+            onError={() => setMediaError(true)}
+            className="max-h-full max-w-full object-contain rounded-lg shadow-xl"
+          />
+        ) : status.media_type === "voice" ? (
           <div className="flex flex-col items-center gap-4 bg-gray-900/80 p-8 rounded-2xl border border-gray-700 shadow-2xl">
             <div className="w-20 h-20 bg-green-500 rounded-full flex items-center justify-center text-white animate-pulse">
               <Mic size={36} />
             </div>
             <p className="text-lg font-medium">Voice Status</p>
-            <audio src={status.media_url} controls className="w-64" />
+            <audio src={status.media_url} controls className="w-64 max-w-full" />
           </div>
-        )}
-        {status.media_type === "text" && (
-          <div className={`w-full h-full flex items-center justify-center p-8 rounded-2xl text-center text-2xl font-bold ${status.bg_color || "bg-gradient-to-br from-purple-600 to-indigo-800"}`}>
-            {status.caption || status.media_url}
+        ) : status.media_type === "text" ? (
+          <div className={`w-full max-w-md p-8 rounded-3xl text-center text-xl font-bold shadow-2xl border border-white/10 ${status.bg_color || "bg-gradient-to-br from-purple-600 to-indigo-800 text-white"}`}>
+            <p className="mb-2 leading-relaxed">{cleanCaption || "Status Update"}</p>
+            <span className="text-xs font-normal text-white/80 uppercase tracking-widest mt-2 block">ChatMe Status</span>
+          </div>
+        ) : (
+          <div className="w-full max-w-sm p-8 rounded-3xl bg-gradient-to-br from-emerald-950 via-gray-900 to-slate-950 border border-emerald-500/20 text-center flex flex-col items-center gap-3 shadow-2xl">
+            <div className="w-14 h-14 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 mb-1">
+              <Sparkles size={28} />
+            </div>
+            <h4 className="text-lg font-bold text-white">ChatMe Status</h4>
+            <p className="text-sm text-gray-300 font-medium">{cleanCaption || "Status update"}</p>
+            <span className="text-[11px] text-emerald-400/70 uppercase tracking-widest mt-2">ChatMe Updates</span>
           </div>
         )}
       </div>
@@ -536,15 +1186,35 @@ function StatusViewScreen({ status, currentUser, onBack, dark, onDelete, onReply
       )}
 
       {/* Caption if any */}
-      {status.media_type !== "text" && status.caption && (
-        <div className="p-4 text-center bg-black/60 text-sm">
-          {status.caption}
+      {status.media_type !== "text" && cleanCaption && !mediaError && (
+        <div className="p-4 text-center bg-black/60 text-sm font-medium">
+          {cleanCaption}
         </div>
       )}
 
+      {/* Quick Emoji Reaction Bar */}
+      <div 
+        className="flex items-center justify-center gap-1.5 px-3 py-1.5 bg-black/60 backdrop-blur-md rounded-full border border-white/10 mx-auto mb-2 shadow-2xl z-20"
+        onMouseDown={(e) => e.stopPropagation()}
+        onMouseUp={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+        onTouchEnd={(e) => e.stopPropagation()}
+      >
+        {["❤️", "😂", "😮", "😢", "🙏", "🔥", "👏", "🎉"].map((emoji) => (
+          <button
+            key={emoji}
+            onClick={() => triggerReaction(emoji)}
+            className="p-1 text-lg sm:text-xl hover:scale-130 active:scale-150 transition-transform duration-150 cursor-pointer select-none"
+            title={`React with ${emoji}`}
+          >
+            {emoji}
+          </button>
+        ))}
+      </div>
+
       {/* Viewers bar for creator */}
       {isCreator && (
-        <div className="p-4 bg-gray-900 border-t border-gray-800 flex items-center justify-between">
+        <div className="p-4 bg-gray-900 border-t border-gray-800 flex items-center justify-between z-20">
           <div className="flex items-center gap-2">
             <Eye size={18} className="text-gray-400" />
             <span className="text-sm font-medium">{viewers.length} views</span>
@@ -574,33 +1244,222 @@ function StatusViewScreen({ status, currentUser, onBack, dark, onDelete, onReply
             onChange={(e) => setReplyText(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && replyText.trim()) {
-                onReply(status.user_id, replyText);
+                const text = replyText.trim();
+                triggerReaction(text.match(/[\p{Emoji_Presentation}\p{Extended_Pictographic}]/u)?.[0] || "❤️");
+                onReply(status.user_id, text);
+                setReplyText("");
               }
             }}
             placeholder="Reply to status..."
             className="flex-1 bg-gray-800 text-white placeholder-gray-400 px-4 py-2.5 rounded-full text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
           />
           <button
+            onClick={handleShareClick}
+            className="w-10 h-10 bg-gray-800 hover:bg-gray-700 text-gray-200 rounded-full flex items-center justify-center transition shrink-0 cursor-pointer"
+            title="Share status"
+          >
+            <Share2 size={18} />
+          </button>
+          <button
             onClick={() => {
               if (replyText.trim()) {
-                onReply(status.user_id, replyText);
+                const text = replyText.trim();
+                triggerReaction(text.match(/[\p{Emoji_Presentation}\p{Extended_Pictographic}]/u)?.[0] || "❤️");
+                onReply(status.user_id, text);
+                setReplyText("");
               }
             }}
-            className="w-10 h-10 bg-green-500 rounded-full flex items-center justify-center text-white hover:bg-green-600 transition shrink-0"
+            className="w-10 h-10 bg-green-500 rounded-full flex items-center justify-center text-white hover:bg-green-600 transition shrink-0 cursor-pointer"
           >
             <Send size={18} />
           </button>
+        </div>
+      )}
+
+      {/* Share Modal Sheet */}
+      {isShareModalOpen && (
+        <div 
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fadeIn"
+          onClick={() => { setIsShareModalOpen(false); setIsHolding(false); }}
+        >
+          <div 
+            className="w-full sm:max-w-md bg-gray-900 border border-gray-800 rounded-t-3xl sm:rounded-3xl p-5 sm:p-6 shadow-2xl flex flex-col gap-4 text-white animate-slideUp sm:animate-scaleUp select-text"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b border-gray-800 pb-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full overflow-hidden bg-gray-800 border border-emerald-500/40">
+                  <img 
+                    src={status.user_photo || getDefaultAvatar(status.user_name)} 
+                    alt="Author" 
+                    className="w-full h-full object-cover" 
+                    onError={(e: any) => { e.target.src = getDefaultAvatar(status.user_name); }} 
+                  />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white leading-tight">Share Status Update</h3>
+                  <div className="flex items-center gap-1.5 mt-0.5">
+                    <span className="text-xs text-gray-400">by {status.user_name || "Contact"}</span>
+                    <span className="text-[10px] px-1.5 py-0.2 rounded-full font-semibold uppercase bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                      {isVideo ? "Video" : isImage ? "Photo" : isVoice ? "Voice" : "Text"}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <button 
+                onClick={() => { setIsShareModalOpen(false); setIsHolding(false); }}
+                className="p-1.5 rounded-full hover:bg-gray-800 text-gray-400 hover:text-white transition cursor-pointer"
+                title="Close"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Status Preview Card */}
+            <div className="bg-gray-950/80 border border-gray-800/80 rounded-2xl p-3.5 flex items-center gap-3">
+              {isImage && validMediaUrl ? (
+                <img src={validMediaUrl} alt="Preview" className="w-12 h-12 object-cover rounded-xl shrink-0 border border-gray-800" />
+              ) : isVideo && validMediaUrl ? (
+                <div className="w-12 h-12 rounded-xl bg-gray-800 border border-gray-700 flex items-center justify-center shrink-0">
+                  <Film size={20} className="text-emerald-400" />
+                </div>
+              ) : isVoice ? (
+                <div className="w-12 h-12 rounded-xl bg-red-500/20 border border-red-500/30 flex items-center justify-center shrink-0">
+                  <Mic size={20} className="text-red-400" />
+                </div>
+              ) : (
+                <div className={`w-12 h-12 rounded-xl ${status.bg_color || "bg-emerald-600"} flex items-center justify-center shrink-0 text-white font-bold text-xs`}>
+                  Aa
+                </div>
+              )}
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-semibold text-white truncate">
+                  {cleanCaption || (isImage ? "Photo Status" : isVideo ? "Video Status" : isVoice ? "Voice Status" : "Text Status")}
+                </p>
+                <p className="text-[11px] text-gray-400 truncate mt-0.5">
+                  {statusDeepLink}
+                </p>
+              </div>
+            </div>
+
+            {/* Primary Action Buttons */}
+            <div className="flex flex-col gap-2">
+              {/* Copy Deep Link */}
+              <button
+                onClick={copyDeepLink}
+                className={`w-full py-3 px-4 rounded-xl text-sm font-semibold flex items-center justify-between transition cursor-pointer ${
+                  copiedLink
+                    ? "bg-emerald-600 text-white"
+                    : "bg-emerald-500 hover:bg-emerald-400 text-gray-950"
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  {copiedLink ? <Check size={18} className="stroke-[2.5]" /> : <Copy size={18} />}
+                  <span>{copiedLink ? "Status Link Copied!" : "Copy Status Deep Link"}</span>
+                </div>
+                <span className="text-xs font-normal opacity-90">#status-{status.id}</span>
+              </button>
+
+              {/* Share via Apps (Native Sheet) */}
+              {typeof navigator !== "undefined" && (
+                <button
+                  onClick={async () => {
+                    const authorName = status.user_name || "ChatMe User";
+                    const title = `ChatMe Status from ${authorName}`;
+                    const text = cleanCaption ? `"${cleanCaption}" — ${authorName} on ChatMe` : `Check out this status on ChatMe!`;
+                    if (navigator.share) {
+                      try {
+                        await navigator.share({ title, text, url: statusDeepLink });
+                        if (showToast) showToast("Status shared successfully!");
+                        setIsShareModalOpen(false);
+                        setIsHolding(false);
+                      } catch (e) {}
+                    } else {
+                      await shareContentViaAndroid({ title, text, url: statusDeepLink });
+                    }
+                  }}
+                  className="w-full py-2.5 px-4 bg-gray-800 hover:bg-gray-700 text-white rounded-xl text-sm font-medium flex items-center gap-2.5 transition cursor-pointer"
+                >
+                  <Share2 size={18} className="text-emerald-400" />
+                  <span>Share with Other Apps</span>
+                </button>
+              )}
+
+              {/* Media Actions for Image or Video */}
+              {(isImage || isVideo) && validMediaUrl && (
+                <div className="grid grid-cols-2 gap-2 mt-1">
+                  <button
+                    onClick={copyMediaLink}
+                    className="py-2.5 px-3 bg-gray-800/80 hover:bg-gray-700/80 text-gray-200 rounded-xl text-xs font-medium flex items-center justify-center gap-2 transition cursor-pointer border border-gray-700/50"
+                  >
+                    {copiedMediaUrl ? <Check size={15} className="text-emerald-400" /> : <Copy size={15} className="text-emerald-400" />}
+                    <span>{copiedMediaUrl ? "URL Copied" : "Copy Media URL"}</span>
+                  </button>
+                  <button
+                    onClick={handleDownloadMedia}
+                    className="py-2.5 px-3 bg-gray-800/80 hover:bg-gray-700/80 text-gray-200 rounded-xl text-xs font-medium flex items-center justify-center gap-2 transition cursor-pointer border border-gray-700/50"
+                  >
+                    <Download size={15} className="text-teal-400" />
+                    <span>Download / Open</span>
+                  </button>
+                </div>
+              )}
+
+              {/* Copy Caption if available */}
+              {cleanCaption && (
+                <button
+                  onClick={copyCaption}
+                  className="w-full py-2.5 px-4 bg-gray-800/60 hover:bg-gray-700/60 text-gray-300 rounded-xl text-xs font-medium flex items-center justify-between transition cursor-pointer border border-gray-800"
+                >
+                  <span className="truncate mr-2">Caption: "{cleanCaption}"</span>
+                  <span className="text-emerald-400 font-semibold shrink-0">
+                    {copiedCaption ? "Copied!" : "Copy Text"}
+                  </span>
+                </button>
+              )}
+            </div>
+
+            {/* Footer close */}
+            <button
+              onClick={() => { setIsShareModalOpen(false); setIsHolding(false); }}
+              className="w-full py-2.5 bg-transparent hover:bg-gray-800 text-gray-400 hover:text-white text-xs font-semibold rounded-xl transition cursor-pointer mt-1"
+            >
+              Done & Resume Status
+            </button>
+          </div>
         </div>
       )}
     </div>
   );
 }
 
-function UpdatesScreen({ dark, currentUser, statuses, onAddStatus, onViewStatus, onDeleteStatus }) {
+function UpdatesScreen({ dark, currentUser, statuses, onAddStatus, onViewStatus, onDeleteStatus, onUpdateStatuses }: any) {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [voiceModalOpen, setVoiceModalOpen] = useState(false);
   const [textModalOpen, setTextModalOpen] = useState(false);
-  
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showSearch, setShowSearch] = useState(false);
+  const [showMenu, setShowMenu] = useState(false);
+  const [showBoostModal, setShowBoostModal] = useState(false);
+  const [showExploreModal, setShowExploreModal] = useState(false);
+  const [showCreateChannelModal, setShowCreateChannelModal] = useState(false);
+  const [selectedChannel, setSelectedChannel] = useState<any | null>(null);
+
+  // Real Status Feed states
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [realStatuses, setRealStatuses] = useState<any[]>([]);
+
+  const [viewedStatusIds, setViewedStatusIds] = useState<Set<string>>(() => {
+    try {
+      const saved = localStorage.getItem("chatme_viewed_statuses");
+      return saved ? new Set(JSON.parse(saved)) : new Set();
+    } catch {
+      return new Set();
+    }
+  });
+
   // Selected media for StatusEditor
   const [selectedEditorMedia, setSelectedEditorMedia] = useState<{
     file: File;
@@ -613,11 +1472,185 @@ function UpdatesScreen({ dark, currentUser, statuses, onAddStatus, onViewStatus,
   const galleryInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
 
+  // Helper to format raw status rows from Supabase
+  const formatStatusRow = (row: any, pMap: Map<string, any>) => {
+    const uid = String(row.user_id || "");
+    const profile = pMap.get(uid) || {};
+    const isMe = currentUser && String(currentUser.id) === uid;
+
+    const displayName = isMe
+      ? (currentUser?.fullname || currentUser?.email || "Me")
+      : (profile.full_name || profile.fullname || profile.name || profile.display_name || row.user_name || "Contact");
+
+    const displayPhoto = isMe
+      ? (currentUser?.photo || getDefaultAvatar(displayName))
+      : (profile.avatar_url || profile.photo || profile.avatar || row.user_photo || getDefaultAvatar(displayName));
+
+    const validMediaUrl = getValidMediaUrl(row.media_url);
+
+    return {
+      ...row,
+      id: row.id,
+      user_id: row.user_id,
+      user_name: displayName,
+      user_photo: displayPhoto,
+      media_type: row.media_type || "image",
+      media_url: validMediaUrl,
+      caption: row.caption || "",
+      created_at: row.created_at,
+      expires_at: row.expires_at,
+      time_posted: formatStatusTime(row.created_at)
+    };
+  };
+
+  // Fetch real unexpired status posts from Supabase
+  const fetchRealStatuses = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const nowIso = new Date().toISOString();
+
+      // 1. Fetch unexpired status posts from status_posts
+      const { data: posts, error: postsError } = await supabase
+        .from("status_posts")
+        .select("*")
+        .gt("expires_at", nowIso)
+        .order("created_at", { ascending: false });
+
+      if (postsError) {
+        console.error("Error fetching status posts:", postsError);
+        setError("Couldn't load statuses. Tap to retry.");
+        setLoading(false);
+        return;
+      }
+
+      // 2. Fetch profiles to display profile photo & name
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("*");
+
+      const pMap = new Map<string, any>();
+      if (profiles) {
+        profiles.forEach((p: any) => {
+          const idVal = String(p.id || p.user_id || "");
+          if (idVal) pMap.set(idVal, p);
+        });
+      }
+
+      // 3. Format & filter by expires_at > now()
+      const nowMs = Date.now();
+      const formattedList = (posts || [])
+        .map((p: any) => formatStatusRow(p, pMap))
+        .filter((s: any) => {
+          const expMs = s.expires_at ? new Date(s.expires_at).getTime() : 0;
+          return expMs > nowMs;
+        });
+
+      // 4. Deduplicate statuses by ID
+      const uniqueMap = new Map<string, any>();
+      formattedList.forEach((s: any) => {
+        const key = String(s.id);
+        if (!uniqueMap.has(key)) {
+          uniqueMap.set(key, s);
+        }
+      });
+
+      const finalStatuses = Array.from(uniqueMap.values());
+      setRealStatuses(finalStatuses);
+      if (typeof onUpdateStatuses === "function") {
+        onUpdateStatuses(finalStatuses);
+      }
+    } catch (err: any) {
+      console.error("Failed to load statuses:", err);
+      setError("Couldn't load statuses. Tap to retry.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Automatic refresh & Realtime subscription on mount
+  useEffect(() => {
+    fetchRealStatuses();
+
+    // Supabase Realtime subscription for status_posts
+    const channel = supabase
+      .channel("updates-status-posts-realtime")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "status_posts" },
+        async (payload: any) => {
+          if (payload.eventType === "INSERT") {
+            const newRow = payload.new;
+            if (!newRow) return;
+
+            const nowMs = Date.now();
+            const expMs = newRow.expires_at ? new Date(newRow.expires_at).getTime() : 0;
+            if (expMs > 0 && expMs <= nowMs) return;
+
+            // Fetch profile for user
+            let pObj: any = null;
+            try {
+              const { data: p } = await supabase
+                .from("profiles")
+                .select("*")
+                .eq("id", newRow.user_id)
+                .single();
+              pObj = p;
+            } catch (e) {}
+
+            const pMap = new Map<string, any>();
+            if (pObj) pMap.set(String(newRow.user_id), pObj);
+
+            const formattedNew = formatStatusRow(newRow, pMap);
+
+            setRealStatuses((prev) => {
+              // Prevent duplicates when initial fetch and Realtime event return same row
+              if (prev.some((item) => String(item.id) === String(formattedNew.id))) {
+                return prev;
+              }
+              return [formattedNew, ...prev];
+            });
+          } else if (payload.eventType === "UPDATE") {
+            const updatedRow = payload.new;
+            if (!updatedRow) return;
+
+            let pObj: any = null;
+            try {
+              const { data: p } = await supabase
+                .from("profiles")
+                .select("*")
+                .eq("id", updatedRow.user_id)
+                .single();
+              pObj = p;
+            } catch (e) {}
+
+            const pMap = new Map<string, any>();
+            if (pObj) pMap.set(String(updatedRow.user_id), pObj);
+
+            const formattedUpdated = formatStatusRow(updatedRow, pMap);
+
+            setRealStatuses((prev) =>
+              prev.map((item) => (String(item.id) === String(formattedUpdated.id) ? formattedUpdated : item))
+            );
+          } else if (payload.eventType === "DELETE") {
+            const deletedId = payload.old?.id;
+            if (deletedId) {
+              setRealStatuses((prev) => prev.filter((item) => String(item.id) !== String(deletedId)));
+            }
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [currentUser?.id]);
+
   const handleFileSelected = (e: any, defaultType: "image" | "video") => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Detect if video
     const isVideo = file.type?.startsWith("video") || defaultType === "video";
     const mediaType: "image" | "video" = isVideo ? "video" : "image";
 
@@ -632,45 +1665,490 @@ function UpdatesScreen({ dark, currentUser, statuses, onAddStatus, onViewStatus,
     if (e.target) e.target.value = "";
   };
 
+  const handleStatusClick = (statusItem: any) => {
+    if (statusItem?.id) {
+      setViewedStatusIds(prev => {
+        const next = new Set(prev);
+        next.add(String(statusItem.id));
+        try {
+          localStorage.setItem("chatme_viewed_statuses", JSON.stringify(Array.from(next)));
+        } catch {}
+        return next;
+      });
+    }
+    onViewStatus(statusItem);
+  };
+
+  // Channels state
+  const [channels, setChannels] = useState([
+    {
+      id: "ch-1",
+      name: "Jobs and Internship Opportunities",
+      photo: "https://images.unsplash.com/photo-1521737711867-e3b97375f902?w=150&auto=format&fit=crop&q=80",
+      latestMsg: "RTX is hiring Associate Engineer For 2021, 2022, 2023, 2024 grads Location: Hyderabad https://careers.rtx.com/global...",
+      time: "7:45 PM",
+      unread: 87,
+      verified: true,
+      followers: "1.2M",
+      following: true,
+      description: "Official tech career updates, job openings, and internship opportunities worldwide."
+    },
+    {
+      id: "ch-2",
+      name: "Motivational Quotes",
+      photo: "https://images.unsplash.com/photo-1519834785169-98be25ec3f84?w=150&auto=format&fit=crop&q=80",
+      latestMsg: "Mr SrK 💫: 📷 Agree?? Yes ❤️ No 🥺",
+      time: "6:58 PM",
+      unread: 48,
+      verified: true,
+      followers: "890K",
+      following: true,
+      description: "Daily motivation, life quotes, and inspirational thoughts."
+    },
+    {
+      id: "ch-3",
+      name: "Dubai Info Hub",
+      photo: "https://images.unsplash.com/photo-1512453979798-5ea266f8880c?w=150&auto=format&fit=crop&q=80",
+      latestMsg: "🔗 Get ready for a high-energy night as Punjabi music star Jasmine Sandlas brings The Dream Girl Tour to Coca-Cola Arena...",
+      time: "6:00 PM",
+      unread: 165,
+      verified: true,
+      followers: "2.4M",
+      following: true,
+      description: "Latest news, events, concerts, and attractions across Dubai and UAE."
+    },
+    {
+      id: "ch-4",
+      name: "WHATSAPP STATUS | IMAGINE WORLD | ROMANTIC STATUS LOVE SAD HINDI MUSIC HD VIDEO...",
+      photo: "https://images.unsplash.com/photo-1518895949257-7621c3c786d7?w=150&auto=format&fit=crop&q=80",
+      latestMsg: "📷 Every moment spent with you, The most beautiful story of my life.🖤✨",
+      time: "5:31 PM",
+      unread: 108,
+      verified: false,
+      followers: "540K",
+      following: true,
+      description: "Trending status videos, music clips, and aesthetic edits."
+    },
+    {
+      id: "ch-5",
+      name: "Ayomidate",
+      photo: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80",
+      latestMsg: "💻 5+ ODDS ON 1XBET 👆👆👆 1XBET CODE 👉 DNHGR REGISTER 💥💥💥 WITH THE LINK BELOW 👆👇 https://crop...",
+      time: "4:58 PM",
+      unread: 29,
+      verified: false,
+      followers: "310K",
+      following: true,
+      description: "Daily sports predictions, match analysis, and updates."
+    },
+    {
+      id: "ch-6",
+      name: "Dubai Media Office - مكتب دبي الإعلامي",
+      photo: "https://images.unsplash.com/photo-1512453979798-5ea266f8880c?w=150&auto=format&fit=crop&q=80",
+      latestMsg: "📷 Thought leaders, decision-makers, and the most influential media voices from the Arab world and beyond... coming together in Dubai.",
+      time: "3:06 PM",
+      unread: 105,
+      verified: true,
+      followers: "3.1M",
+      following: true,
+      description: "Official news and press releases from Dubai Media Office."
+    },
+    {
+      id: "ch-7",
+      name: "Motivation Quotes Hindi English Shyari Suvichar Funny Video Status Success Story UPSC IAS Motivation...",
+      photo: "https://images.unsplash.com/photo-1499209974431-9dac3ada00d7?w=150&auto=format&fit=crop&q=80",
+      latestMsg: "🔗 https://whatsapp.com/channel/0029VaHq3k62kNFu5tptxx3X",
+      time: "2:13 PM",
+      unread: 52,
+      verified: false,
+      followers: "420K",
+      following: true,
+      description: "UPSC IAS motivation, study quotes, and success stories."
+    },
+    {
+      id: "ch-8",
+      name: "Quotes Motivational | Quotes Real Life Stories Motivation",
+      photo: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80",
+      latestMsg: "🔗 https://whatsapp.com/channel/0029VbDEs7M65yDEPvWybK2r",
+      time: "2:06 PM",
+      unread: 48,
+      verified: false,
+      followers: "280K",
+      following: true,
+      description: "Real life stories and inspirational quotes."
+    },
+    {
+      id: "ch-9",
+      name: "1win",
+      photo: "https://images.unsplash.com/photo-1508098682722-e99c43a406b2?w=150&auto=format&fit=crop&q=80",
+      latestMsg: "📷 Red or blue? Who starts the season with a trophy? Arsenal face Manchester City in the Community Shield tonight. P...",
+      time: "1:45 PM",
+      unread: 35,
+      verified: true,
+      followers: "1.8M",
+      following: true,
+      description: "Official sports news, fixture highlights, and community updates."
+    },
+    {
+      id: "ch-10",
+      name: "BrodaseunTv",
+      photo: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80",
+      latestMsg: "🎙️ Voice message (1:21)",
+      time: "1:12 PM",
+      unread: 72,
+      verified: false,
+      followers: "190K",
+      following: true,
+      description: "Entertainment news, podcasts, and trending comedy clips."
+    },
+    {
+      id: "ch-11",
+      name: "Lovin Dubai",
+      photo: "https://images.unsplash.com/photo-1526495124232-a04e1849168c?w=150&auto=format&fit=crop&q=80",
+      latestMsg: "📷 POV: You're chilling on the weekend, but then remember you got work tomorrow 😭",
+      time: "12:40 PM",
+      unread: 187,
+      verified: true,
+      followers: "2.9M",
+      following: true,
+      description: "Everything you need to know about life, food, and fun in Dubai."
+    }
+  ]);
+
+  // Combine realStatuses with parent statuses fallback if realStatuses empty & not loading
+  const activeStatusList = realStatuses.length > 0 || !loading ? realStatuses : (statuses || []);
+
+  const myStatuses = activeStatusList.filter((s: any) => currentUser && String(s.user_id) === String(currentUser.id));
+  const otherStatuses = activeStatusList.filter((s: any) => !currentUser || String(s.user_id) !== String(currentUser.id));
+
+  // Filter channels based on search
+  const filteredChannels = channels.filter(ch => 
+    !searchQuery || 
+    ch.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+    ch.latestMsg.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
   return (
-    <div className="flex flex-col h-full relative">
-      <ScreenHeader title="Updates" dark={dark} />
-      
-      <div className={`p-4 flex-1 overflow-y-auto ${dark ? "bg-gray-950 text-white" : "bg-white text-gray-900"}`}>
-        {/* My Status */}
-        <div className="flex items-center gap-4 mb-6 cursor-pointer" onClick={() => setSheetOpen(true)}>
+    <div className="flex flex-col h-full relative bg-gray-950 text-white overflow-hidden select-none">
+      {/* 1. UPDATES PAGE HEADER */}
+      <div className="px-4 py-3 bg-gray-950 border-b border-gray-800/60 flex items-center justify-between shrink-0 z-10">
+        <h1 className="text-xl font-bold text-white tracking-tight">Updates</h1>
+
+        <div className="flex items-center gap-3">
+          <button 
+            onClick={() => galleryInputRef.current?.click()}
+            className="p-1.5 text-gray-300 hover:text-white transition active:scale-95 cursor-pointer"
+            title="Camera"
+          >
+            <Camera size={21} />
+          </button>
+          <button 
+            onClick={() => setShowSearch(!showSearch)}
+            className="p-1.5 text-gray-300 hover:text-white transition active:scale-95 cursor-pointer"
+            title="Search"
+          >
+            <Search size={21} />
+          </button>
           <div className="relative">
-            <div className="w-14 h-14 bg-gray-300 rounded-full overflow-hidden border-2 border-green-500 p-0.5">
-              <img src={currentUser?.photo || getDefaultAvatar(currentUser?.fullname)} alt="Me" className="w-full h-full object-cover rounded-full" />
-            </div>
-            <div className="absolute bottom-0 right-0 w-5 h-5 bg-green-500 rounded-full flex items-center justify-center text-white text-xs border-2 border-white dark:border-gray-950">
-              <Plus size={12} />
-            </div>
-          </div>
-          <div>
-            <p className="font-semibold text-base">My Status</p>
-            <p className="text-xs text-gray-500 dark:text-gray-400">Tap to add status update</p>
+            <button 
+              onClick={() => setShowMenu(!showMenu)}
+              className="p-1.5 text-gray-300 hover:text-white transition active:scale-95 cursor-pointer"
+              title="More options"
+            >
+              <MoreVertical size={21} />
+            </button>
+
+            {/* Dropdown Menu */}
+            {showMenu && (
+              <div className="absolute right-0 mt-2 w-48 bg-gray-900 border border-gray-800 rounded-2xl shadow-2xl z-50 py-1 text-sm font-medium animate-fadeIn">
+                <button 
+                  onClick={() => { setShowMenu(false); setSheetOpen(true); }}
+                  className="w-full text-left px-4 py-2.5 hover:bg-gray-800 text-gray-200 transition cursor-pointer"
+                >
+                  Status privacy
+                </button>
+                <button 
+                  onClick={() => { setShowMenu(false); setShowCreateChannelModal(true); }}
+                  className="w-full text-left px-4 py-2.5 hover:bg-gray-800 text-gray-200 transition cursor-pointer"
+                >
+                  Create Channel
+                </button>
+                <button 
+                  onClick={() => { setShowMenu(false); setShowExploreModal(true); }}
+                  className="w-full text-left px-4 py-2.5 hover:bg-gray-800 text-gray-200 transition border-t border-gray-800/80 cursor-pointer"
+                >
+                  Explore Channels
+                </button>
+              </div>
+            )}
           </div>
         </div>
+      </div>
 
-        <p className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-3">Recent updates</p>
-
-        {/* Status List */}
-        <div className="flex gap-4 overflow-x-auto pb-4">
-          {statuses.map((status: any) => (
-            <div key={status.id} className="flex-shrink-0 flex flex-col items-center gap-1 cursor-pointer" onClick={() => onViewStatus(status)}>
-              <div className="w-16 h-16 rounded-full border-2 border-green-500 p-0.5">
-                <div className="w-full h-full rounded-full overflow-hidden bg-gray-200">
-                  <img src={status.user_photo || getDefaultAvatar(status.user_name)} alt={status.user_name} className="w-full h-full object-cover" />
-                </div>
-              </div>
-              <p className="text-xs font-medium truncate w-16 text-center">{status.user_name?.split(' ')[0]}</p>
-            </div>
-          ))}
-          {statuses.length === 0 && (
-            <p className="text-sm text-gray-500 italic py-4">No recent status updates from contacts.</p>
+      {/* Optional Search Bar */}
+      {showSearch && (
+        <div className="px-4 py-2 bg-gray-900 border-b border-gray-800/80 flex items-center gap-2 animate-fadeIn">
+          <Search size={18} className="text-gray-400 shrink-0" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search status updates & channels..."
+            className="flex-1 bg-transparent text-sm text-white placeholder-gray-400 focus:outline-none"
+            autoFocus
+          />
+          {searchQuery && (
+            <button onClick={() => setSearchQuery("")} className="text-gray-400 hover:text-white">
+              <X size={18} />
+            </button>
           )}
         </div>
+      )}
+
+      {/* Main Scrollable Area */}
+      <div className="flex-1 overflow-y-auto px-4 py-3 pb-24 space-y-4">
+        {/* 2. STATUS SECTION */}
+        <div>
+          <div className="flex items-center justify-between mb-2.5">
+            <h2 className="text-base font-bold text-white tracking-wide">Status</h2>
+            {loading && (
+              <div className="flex items-center gap-1.5 text-xs text-emerald-400">
+                <Loader2 size={13} className="animate-spin" />
+                <span>Refreshing...</span>
+              </div>
+            )}
+          </div>
+
+          {/* Error Banner */}
+          {error && !loading && (
+            <div className="mb-3">
+              <button
+                onClick={fetchRealStatuses}
+                className="flex items-center gap-2 px-3 py-2 bg-red-500/10 border border-red-500/30 hover:bg-red-500/20 rounded-xl text-xs text-red-400 transition cursor-pointer"
+              >
+                <AlertCircle size={15} className="shrink-0" />
+                <span>Couldn't load statuses. Tap to retry.</span>
+              </button>
+            </div>
+          )}
+
+          {/* Horizontally Scrollable Status Carousel */}
+          <div className="flex gap-3 overflow-x-auto no-scrollbar pb-1 pt-0.5 scroll-smooth">
+            {/* 3. ADD STATUS CARD */}
+            <div 
+              onClick={() => setSheetOpen(true)}
+              className="w-[130px] sm:w-[150px] shrink-0 h-[190px] sm:h-[210px] rounded-2xl overflow-hidden relative border border-gray-800/80 bg-gradient-to-b from-gray-900 via-gray-900 to-gray-950 cursor-pointer group shadow-md flex flex-col justify-between p-3 select-none hover:border-emerald-500/50 transition-all"
+            >
+              <div className="relative w-11 h-11 rounded-full border border-gray-700/80 bg-gray-800 overflow-visible p-0.5 mt-1">
+                <img 
+                  src={currentUser?.photo || getDefaultAvatar(currentUser?.fullname)} 
+                  alt="Me" 
+                  className="w-full h-full object-cover rounded-full" 
+                  onError={(e: any) => { e.target.src = getDefaultAvatar(currentUser?.fullname); }}
+                />
+                <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-emerald-500 rounded-full flex items-center justify-center text-white font-bold text-xs border-2 border-gray-950 shadow-md group-hover:scale-110 transition-transform">
+                  <Plus size={12} strokeWidth={3} />
+                </div>
+              </div>
+
+              <div className="mt-auto">
+                <p className="text-xs font-bold text-white tracking-wide">Add status</p>
+              </div>
+            </div>
+
+            {/* MY POSTED STATUSES (IF ANY) */}
+            {myStatuses.map((s: any) => {
+              const isViewed = viewedStatusIds.has(String(s.id));
+              const validUrl = getValidMediaUrl(s.media_url);
+              return (
+                <div
+                  key={s.id}
+                  onClick={() => handleStatusClick(s)}
+                  className="w-[130px] sm:w-[150px] shrink-0 h-[190px] sm:h-[210px] rounded-2xl overflow-hidden relative border border-white/10 shadow-lg cursor-pointer group hover:scale-[1.02] transition-transform bg-gray-900 select-none"
+                >
+                  {/* Background Media */}
+                  {validUrl && (s.media_type === "image" || !s.media_type) ? (
+                    <img 
+                      src={validUrl} 
+                      alt="My status" 
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" 
+                      onError={(e: any) => { e.target.style.display = 'none'; }} 
+                    />
+                  ) : validUrl && s.media_type === "video" ? (
+                    <video src={validUrl} className="w-full h-full object-cover" />
+                  ) : (
+                    <div className={`w-full h-full p-3 flex items-center justify-center text-center font-bold text-xs leading-relaxed ${s.bg_color || "bg-gradient-to-br from-purple-800 via-indigo-900 to-gray-950 text-white"}`}>
+                      <p className="line-clamp-4">{cleanStatusCaption(s.caption) || "My Status"}</p>
+                    </div>
+                  )}
+
+                  {/* Dark Gradient Overlay */}
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent pointer-events-none" />
+
+                  {/* Top Profile Avatar + Ring */}
+                  <div className={`w-9 h-9 rounded-full p-0.5 border-2 ${isViewed ? "border-gray-500/80" : "border-emerald-500"} bg-gray-950 shadow-md absolute top-2.5 left-2.5 z-10 overflow-hidden`}>
+                    <img src={currentUser?.photo || getDefaultAvatar(currentUser?.fullname)} alt="avatar" className="w-full h-full object-cover rounded-full" />
+                  </div>
+
+                  {/* Bottom User Name & Time */}
+                  <div className="absolute bottom-2.5 left-2.5 right-2.5 z-10 drop-shadow-md">
+                    <p className="text-xs font-semibold text-white truncate">
+                      My Status
+                    </p>
+                    {s.time_posted && (
+                      <p className="text-[10px] text-gray-300 font-medium truncate">
+                        {s.time_posted}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+
+            {/* CONTACT STATUS CARDS */}
+            {otherStatuses.map((s: any) => {
+              const isViewed = viewedStatusIds.has(String(s.id));
+              const validUrl = getValidMediaUrl(s.media_url);
+              return (
+                <div
+                  key={s.id}
+                  onClick={() => handleStatusClick(s)}
+                  className="w-[130px] sm:w-[150px] shrink-0 h-[190px] sm:h-[210px] rounded-2xl overflow-hidden relative border border-white/10 shadow-lg cursor-pointer group hover:scale-[1.02] transition-transform bg-gray-900 select-none"
+                >
+                  {/* Background Media */}
+                  {validUrl && (s.media_type === "image" || !s.media_type) ? (
+                    <img 
+                      src={validUrl} 
+                      alt="Status update" 
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" 
+                      onError={(e: any) => { e.target.style.display = 'none'; }} 
+                    />
+                  ) : validUrl && s.media_type === "video" ? (
+                    <video src={validUrl} className="w-full h-full object-cover" />
+                  ) : (
+                    <div className={`w-full h-full p-3 flex items-center justify-center text-center font-bold text-xs leading-relaxed ${s.bg_color || "bg-gradient-to-br from-emerald-800 via-teal-900 to-gray-950 text-white"}`}>
+                      <p className="line-clamp-4">{cleanStatusCaption(s.caption) || "Status Update"}</p>
+                    </div>
+                  )}
+
+                  {/* Dark Gradient Overlay */}
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent pointer-events-none" />
+
+                  {/* Top Profile Avatar + Ring */}
+                  <div className={`w-9 h-9 rounded-full p-0.5 border-2 ${isViewed ? "border-gray-500/80" : "border-emerald-500"} bg-gray-950 shadow-md absolute top-2.5 left-2.5 z-10 overflow-hidden`}>
+                    <img 
+                      src={s.user_photo || getDefaultAvatar(s.user_name || "Contact")} 
+                      alt={s.user_name || "Contact"} 
+                      className="w-full h-full object-cover rounded-full"
+                      onError={(e: any) => { e.target.src = getDefaultAvatar(s.user_name); }} 
+                    />
+                  </div>
+
+                  {/* Bottom User Name & Time */}
+                  <div className="absolute bottom-2.5 left-2.5 right-2.5 z-10 drop-shadow-md">
+                    <p className="text-xs font-semibold text-white truncate">
+                      {s.user_name || "Contact"}
+                    </p>
+                    {s.time_posted && (
+                      <p className="text-[10px] text-gray-300 font-medium truncate">
+                        {s.time_posted}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+
+            {/* Empty State Message */}
+            {!loading && !error && myStatuses.length === 0 && otherStatuses.length === 0 && (
+              <div className="flex items-center justify-center p-4 border border-dashed border-gray-800 rounded-2xl shrink-0 text-xs text-gray-500 italic font-medium">
+                No status updates yet.
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* 8. BOOST STATUS BUTTON */}
+        <button 
+          onClick={() => setShowBoostModal(true)}
+          className="w-full py-2.5 px-4 bg-gray-900/90 hover:bg-gray-800 border border-gray-800/80 rounded-full flex items-center justify-center gap-2 text-xs sm:text-sm font-semibold text-gray-200 hover:text-white transition active:scale-98 shadow-sm cursor-pointer"
+        >
+          <Megaphone size={16} className="text-emerald-400 shrink-0" />
+          <span>Boost status</span>
+        </button>
+
+        {/* 9. CHANNELS SECTION */}
+        <div className="pt-2">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-base font-bold text-white tracking-wide">Channels</h2>
+            <button 
+              onClick={() => setShowExploreModal(true)}
+              className="px-3.5 py-1 bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs font-semibold rounded-full border border-gray-700/80 transition cursor-pointer"
+            >
+              Explore
+            </button>
+          </div>
+
+          {/* 10. CHANNEL LIST */}
+          <div className="flex flex-col">
+            {filteredChannels.map((ch) => (
+              <div
+                key={ch.id}
+                onClick={() => setSelectedChannel(ch)}
+                className="flex items-center gap-3 py-3 px-1 rounded-xl hover:bg-gray-900/80 active:bg-gray-800/90 transition cursor-pointer border-b border-gray-900/60 last:border-0"
+              >
+                {/* Avatar */}
+                <div className="w-12 h-12 rounded-full overflow-hidden bg-gray-800 shrink-0 border border-gray-800 relative">
+                  <img 
+                    src={ch.photo} 
+                    alt={ch.name} 
+                    className="w-full h-full object-cover"
+                    onError={(e: any) => { e.target.src = getDefaultAvatar(ch.name); }}
+                  />
+                </div>
+
+                {/* Info */}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between mb-0.5">
+                    <h3 className="text-sm font-bold text-white truncate flex items-center gap-1">
+                      <span className="truncate">{ch.name}</span>
+                      {ch.verified && <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0 fill-emerald-400" />}
+                    </h3>
+                    <span className="text-[11px] font-medium text-gray-400 shrink-0 ml-2">{ch.time}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs text-gray-400 truncate pr-2 font-normal">
+                      {ch.latestMsg}
+                    </p>
+                    {ch.unread > 0 && (
+                      <span className="px-2 py-0.5 bg-emerald-500 text-gray-950 font-bold text-[11px] rounded-full shrink-0 shadow-sm">
+                        {ch.unread}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* 11. FLOATING ACTION BUTTONS */}
+      <div className="fixed bottom-20 right-4 flex flex-col gap-2.5 z-40">
+        <button
+          onClick={() => setTextModalOpen(true)}
+          title="Create Text Status"
+          className="w-10 h-10 rounded-xl bg-gray-800 hover:bg-gray-700 text-white flex items-center justify-center shadow-lg border border-gray-700 active:scale-95 transition cursor-pointer"
+        >
+          <Pencil size={18} />
+        </button>
+        <button
+          onClick={() => galleryInputRef.current?.click()}
+          title="Create Media Status"
+          className="w-14 h-14 rounded-2xl bg-emerald-500 hover:bg-emerald-600 text-white flex items-center justify-center shadow-2xl active:scale-95 transition border border-emerald-400/30 cursor-pointer"
+        >
+          <Camera size={24} />
+        </button>
       </div>
 
       {/* Hidden file inputs */}
@@ -704,33 +2182,33 @@ function UpdatesScreen({ dark, currentUser, statuses, onAddStatus, onViewStatus,
 
       {/* Bottom Sheet for Status Options */}
       {sheetOpen && (
-        <div className="absolute inset-0 bg-black/60 z-50 flex flex-col justify-end animate-fadeIn">
-          <div className={`p-6 rounded-t-3xl ${dark ? "bg-gray-900 text-white" : "bg-white text-gray-900"} shadow-2xl`}>
+        <div className="fixed inset-0 bg-black/70 z-50 flex flex-col justify-end animate-fadeIn">
+          <div className="p-6 rounded-t-3xl bg-gray-900 text-white border-t border-gray-800 shadow-2xl">
             <div className="flex justify-between items-center mb-6">
-              <h3 className="text-lg font-bold">Create Status</h3>
-              <button onClick={() => setSheetOpen(false)}><X size={20} /></button>
+              <h3 className="text-lg font-bold">Add Status Update</h3>
+              <button onClick={() => setSheetOpen(false)} className="text-gray-400 hover:text-white"><X size={20} /></button>
             </div>
 
             <div className="grid grid-cols-4 gap-4 text-center">
-              <button onClick={() => cameraInputRef.current?.click()} className="flex flex-col items-center gap-2 p-3 rounded-xl bg-gray-100 dark:bg-gray-800 hover:bg-green-50 dark:hover:bg-green-900/30 transition">
-                <div className="w-12 h-12 bg-green-500 rounded-full flex items-center justify-center text-white"><Camera size={22} /></div>
+              <button onClick={() => cameraInputRef.current?.click()} className="flex flex-col items-center gap-2 p-3 rounded-2xl bg-gray-800 hover:bg-emerald-950/40 border border-gray-700/80 transition">
+                <div className="w-12 h-12 bg-emerald-500 rounded-full flex items-center justify-center text-white"><Camera size={22} /></div>
                 <span className="text-xs font-medium">Camera</span>
               </button>
-              <button onClick={() => galleryInputRef.current?.click()} className="flex flex-col items-center gap-2 p-3 rounded-xl bg-gray-100 dark:bg-gray-800 hover:bg-green-50 dark:hover:bg-green-900/30 transition">
+              <button onClick={() => galleryInputRef.current?.click()} className="flex flex-col items-center gap-2 p-3 rounded-2xl bg-gray-800 hover:bg-blue-950/40 border border-gray-700/80 transition">
                 <div className="w-12 h-12 bg-blue-500 rounded-full flex items-center justify-center text-white"><ImageIcon size={22} /></div>
                 <span className="text-xs font-medium">Gallery</span>
               </button>
-              <button onClick={() => videoInputRef.current?.click()} className="flex flex-col items-center gap-2 p-3 rounded-xl bg-gray-100 dark:bg-gray-800 hover:bg-green-50 dark:hover:bg-green-900/30 transition">
+              <button onClick={() => videoInputRef.current?.click()} className="flex flex-col items-center gap-2 p-3 rounded-2xl bg-gray-800 hover:bg-purple-950/40 border border-gray-700/80 transition">
                 <div className="w-12 h-12 bg-purple-500 rounded-full flex items-center justify-center text-white"><Film size={22} /></div>
                 <span className="text-xs font-medium">Video</span>
               </button>
-              <button onClick={() => { setSheetOpen(false); setVoiceModalOpen(true); }} className="flex flex-col items-center gap-2 p-3 rounded-xl bg-gray-100 dark:bg-gray-800 hover:bg-green-50 dark:hover:bg-green-900/30 transition">
+              <button onClick={() => { setSheetOpen(false); setVoiceModalOpen(true); }} className="flex flex-col items-center gap-2 p-3 rounded-2xl bg-gray-800 hover:bg-orange-950/40 border border-gray-700/80 transition">
                 <div className="w-12 h-12 bg-orange-500 rounded-full flex items-center justify-center text-white"><Mic size={22} /></div>
                 <span className="text-xs font-medium">Voice</span>
               </button>
             </div>
 
-            <button onClick={() => { setSheetOpen(false); setTextModalOpen(true); }} className="w-full mt-4 py-3 bg-green-600 text-white font-medium rounded-xl shadow-md hover:bg-green-700 transition">
+            <button onClick={() => { setSheetOpen(false); setTextModalOpen(true); }} className="w-full mt-5 py-3 bg-emerald-500 text-gray-950 font-bold rounded-2xl shadow-lg hover:bg-emerald-400 transition">
               Create Text Status
             </button>
           </div>
@@ -783,6 +2261,242 @@ function UpdatesScreen({ dark, currentUser, statuses, onAddStatus, onViewStatus,
           dark={dark}
         />
       )}
+
+      {/* Boost Status Modal */}
+      {showBoostModal && (
+        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 animate-fadeIn">
+          <div className="w-full max-w-sm bg-gray-900 border border-gray-800 rounded-3xl p-6 shadow-2xl flex flex-col gap-4 text-center">
+            <div className="w-14 h-14 bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 rounded-2xl flex items-center justify-center mx-auto">
+              <Megaphone size={28} />
+            </div>
+            <div>
+              <h3 className="text-lg font-bold text-white mb-1">Boost Your Status</h3>
+              <p className="text-xs text-gray-400 leading-relaxed">
+                Promote your status updates across ChatMe channels and reach thousands of contacts and local followers instantly.
+              </p>
+            </div>
+            <div className="bg-gray-950 p-4 rounded-2xl border border-gray-800 text-left text-xs space-y-2">
+              <div className="flex items-center gap-2 text-gray-200">
+                <Check size={16} className="text-emerald-400 shrink-0" />
+                <span>Feature on top of Updates discovery</span>
+              </div>
+              <div className="flex items-center gap-2 text-gray-200">
+                <Check size={16} className="text-emerald-400 shrink-0" />
+                <span>Auto-broadcast to channel subscribers</span>
+              </div>
+              <div className="flex items-center gap-2 text-gray-200">
+                <Check size={16} className="text-emerald-400 shrink-0" />
+                <span>Real-time audience analytics</span>
+              </div>
+            </div>
+            <div className="flex gap-2 pt-2">
+              <button 
+                onClick={() => setShowBoostModal(false)}
+                className="flex-1 py-2.5 bg-gray-800 hover:bg-gray-700 text-gray-300 font-semibold text-xs rounded-xl transition"
+              >
+                Close
+              </button>
+              <button 
+                onClick={() => {
+                  setShowBoostModal(false);
+                  setSheetOpen(true);
+                }}
+                className="flex-1 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-gray-950 font-bold text-xs rounded-xl transition shadow-lg"
+              >
+                Create Boosted Status
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Channel Details View Modal */}
+      {selectedChannel && (
+        <div className="fixed inset-0 bg-black/90 z-50 flex flex-col animate-fadeIn">
+          {/* Header */}
+          <div className="p-4 bg-gray-950 border-b border-gray-800 flex items-center justify-between shrink-0">
+            <div className="flex items-center gap-3 min-w-0">
+              <button onClick={() => setSelectedChannel(null)} className="p-1 text-gray-300 hover:text-white">
+                <ArrowLeft size={22} />
+              </button>
+              <div className="w-10 h-10 rounded-full overflow-hidden bg-gray-800 shrink-0">
+                <img src={selectedChannel.photo} alt={selectedChannel.name} className="w-full h-full object-cover" />
+              </div>
+              <div className="min-w-0">
+                <h3 className="font-bold text-sm text-white truncate flex items-center gap-1">
+                  <span>{selectedChannel.name}</span>
+                  {selectedChannel.verified && <Check className="w-3.5 h-3.5 text-emerald-400 fill-emerald-400 shrink-0" />}
+                </h3>
+                <p className="text-xs text-gray-400">{selectedChannel.followers} followers</p>
+              </div>
+            </div>
+            <button 
+              onClick={() => {
+                setChannels(prev => prev.map(c => c.id === selectedChannel.id ? { ...c, following: !c.following } : c));
+                setSelectedChannel(prev => prev ? { ...prev, following: !prev.following } : null);
+              }}
+              className={`px-4 py-1.5 rounded-full text-xs font-bold transition ${selectedChannel.following ? "bg-gray-800 text-gray-300 hover:bg-gray-700" : "bg-emerald-500 text-gray-950 hover:bg-emerald-400"}`}
+            >
+              {selectedChannel.following ? "Following" : "Follow"}
+            </button>
+          </div>
+
+          {/* Posts Feed */}
+          <div className="flex-1 overflow-y-auto p-4 space-y-4 max-w-lg mx-auto w-full">
+            <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 shadow-lg space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-emerald-400 uppercase tracking-wider">Latest Update</span>
+                <span className="text-xs text-gray-400">{selectedChannel.time}</span>
+              </div>
+              <p className="text-sm text-gray-200 leading-relaxed font-normal">
+                {selectedChannel.latestMsg}
+              </p>
+              <div className="pt-2 border-t border-gray-800/80 flex items-center justify-between text-xs text-gray-400">
+                <div className="flex items-center gap-4">
+                  <button className="flex items-center gap-1 hover:text-emerald-400 transition">
+                    <Heart size={16} />
+                    <span>2.4K</span>
+                  </button>
+                  <button className="flex items-center gap-1 hover:text-emerald-400 transition">
+                    <MessageSquare size={16} />
+                    <span>180</span>
+                  </button>
+                </div>
+                <button className="hover:text-white transition">
+                  <Share2 size={16} />
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Explore Channels Modal */}
+      {showExploreModal && (
+        <div className="fixed inset-0 bg-black/90 z-50 flex flex-col animate-fadeIn">
+          <div className="p-4 bg-gray-950 border-b border-gray-800 flex items-center justify-between shrink-0">
+            <div className="flex items-center gap-3">
+              <button onClick={() => setShowExploreModal(false)} className="p-1 text-gray-300 hover:text-white">
+                <ArrowLeft size={22} />
+              </button>
+              <h2 className="text-lg font-bold text-white">Explore Channels</h2>
+            </div>
+          </div>
+          <div className="flex-1 overflow-y-auto p-4 space-y-3 max-w-lg mx-auto w-full">
+            <p className="text-xs text-gray-400 mb-2">Find and follow popular channels on ChatMe:</p>
+            {channels.map((ch) => (
+              <div key={ch.id} className="p-3 bg-gray-900 border border-gray-800 rounded-2xl flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  <img src={ch.photo} alt={ch.name} className="w-12 h-12 rounded-full object-cover shrink-0 border border-gray-800" />
+                  <div className="min-w-0">
+                    <h4 className="font-bold text-sm text-white truncate flex items-center gap-1">
+                      <span className="truncate">{ch.name}</span>
+                      {ch.verified && <Check className="w-3.5 h-3.5 text-emerald-400 fill-emerald-400 shrink-0" />}
+                    </h4>
+                    <p className="text-xs text-gray-400 truncate">{ch.followers} followers • {ch.description}</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => {
+                    setChannels(prev => prev.map(c => c.id === ch.id ? { ...c, following: !c.following } : c));
+                  }}
+                  className={`px-3 py-1.5 rounded-full text-xs font-bold shrink-0 transition ${ch.following ? "bg-gray-800 text-gray-300" : "bg-emerald-500 text-gray-950 hover:bg-emerald-400"}`}
+                >
+                  {ch.following ? "Following" : "Follow"}
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Create Channel Modal */}
+      {showCreateChannelModal && (
+        <CreateChannelModal
+          onClose={() => setShowCreateChannelModal(false)}
+          onCreate={(newCh) => {
+            setChannels(prev => [newCh, ...prev]);
+            setShowCreateChannelModal(false);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function CreateChannelModal({ onClose, onCreate }: { onClose: () => void; onCreate: (ch: any) => void }) {
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name.trim()) return;
+
+    onCreate({
+      id: `ch-${Date.now()}`,
+      name: name.trim(),
+      photo: `https://images.unsplash.com/photo-1518770660439-4636190af475?w=150&auto=format&fit=crop&q=80`,
+      latestMsg: "Welcome to our new channel! Updates will be posted here.",
+      time: "Just now",
+      unread: 1,
+      verified: true,
+      followers: "1 follower",
+      following: true,
+      description: description.trim() || "Official ChatMe broadcast channel."
+    });
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 animate-fadeIn">
+      <div className="w-full max-w-sm bg-gray-900 border border-gray-800 rounded-3xl p-6 shadow-2xl flex flex-col gap-4">
+        <div className="flex justify-between items-center border-b border-gray-800 pb-3">
+          <h3 className="text-lg font-bold text-white">Create Channel</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-white">
+            <X size={20} />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+          <div>
+            <label className="text-xs font-semibold text-gray-300 block mb-1">Channel Name</label>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. Daily Tech Updates"
+              required
+              className="w-full bg-gray-950 border border-gray-800 rounded-xl px-3.5 py-2.5 text-sm text-white focus:border-emerald-500 focus:outline-none"
+            />
+          </div>
+
+          <div>
+            <label className="text-xs font-semibold text-gray-300 block mb-1">Description (Optional)</label>
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Describe what your channel is about..."
+              rows={3}
+              className="w-full bg-gray-950 border border-gray-800 rounded-xl px-3.5 py-2 text-sm text-white focus:border-emerald-500 focus:outline-none resize-none"
+            />
+          </div>
+
+          <div className="flex gap-2 pt-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 py-2.5 bg-gray-800 hover:bg-gray-700 text-gray-300 font-semibold text-xs rounded-xl transition"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="flex-1 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-gray-950 font-bold text-xs rounded-xl transition shadow-lg"
+            >
+              Create
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }
@@ -1026,14 +2740,9 @@ export function timeAgoLabel(ts: any): string {
 
 export const BUILTIN_WALLPAPERS: Record<string, { name: string; class: string; previewBg: string }> = {
   default: {
-    name: "Default Clean",
-    class: "bg-gray-50 dark:bg-gray-950",
-    previewBg: "bg-gray-100 dark:bg-gray-800"
-  },
-  doodle: {
-    name: "Classic WhatsApp Chat",
-    class: "bg-[#efeae2] dark:bg-[#0b141a]",
-    previewBg: "bg-[#efeae2] dark:bg-[#0b141a]"
+    name: "ChatMe Futuristic Dark",
+    class: "bg-[#0b131e] bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-teal-900/20 via-slate-950 to-gray-950 text-white bg-cover bg-center",
+    previewBg: "bg-slate-950 text-emerald-400"
   },
   emerald: {
     name: "Emerald Mint",
@@ -1109,78 +2818,606 @@ export function compressWallpaperImage(file: File): Promise<string> {
 /*  Home Screen                                                        */
 /* ------------------------------------------------------------------ */
 
-function HomeScreen({ users, currentUser, messagesData, unread, openChat, dark, onlinePresenceSet }: any) {
+function HomeScreen({
+  users,
+  currentUser,
+  messagesData,
+  unread,
+  openChat,
+  dark,
+  onlinePresenceSet,
+  calls = [],
+  onCall,
+  onStartChat,
+  onNewGroup,
+  onAddContact,
+  onAddStatus,
+  onOpenAI,
+  onOpenSupport,
+  onOpenSettings,
+  onToggleDark,
+  showToast
+}: any) {
+  const [homeTab, setHomeTab] = useState<"chats" | "groups" | "calls">("chats");
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [fabMenuOpen, setFabMenuOpen] = useState(false);
 
-  const rows = users
-    .filter((u) => u.id !== currentUser.id && messagesData[u.id])
-    .map((u) => {
+  // Group conversations
+  const groupUsers = users.filter((u: any) => u.isGroup);
+  // Direct conversations
+  const directUsers = users.filter((u: any) => !u.isGroup && u.id !== currentUser?.id);
+
+  // Filtered rows for chats
+  const chatRows = directUsers
+    .map((u: any) => {
       const msgs = messagesData[u.id] || [];
       const last = msgs[msgs.length - 1];
       return { user: u, last, unread: unread[u.id] || 0 };
     })
-    .filter((r) => r.user.fullname.toLowerCase().includes(query.toLowerCase()));
+    .filter((r: any) => r.user.fullname.toLowerCase().includes(query.toLowerCase()));
+
+  // Filtered groups
+  const groupRows = groupUsers
+    .map((u: any) => {
+      const msgs = messagesData[u.id] || [];
+      const last = msgs[msgs.length - 1];
+      return { user: u, last, unread: unread[u.id] || 0 };
+    })
+    .filter((r: any) => r.user.fullname.toLowerCase().includes(query.toLowerCase()));
+
+  // Filtered calls
+  const filteredCalls = (calls || []).filter((c: any) => {
+    if (!query.trim()) return true;
+    const u = users.find((usr: any) => usr.id === c.userId);
+    return u?.fullname?.toLowerCase().includes(query.toLowerCase());
+  });
+
+  const totalUnreadChats = Object.values(unread || {}).reduce((acc: number, val: any) => acc + (Number(val) || 0), 0);
 
   return (
-    <div className="flex flex-col h-full">
-      <div className={`px-4 py-4 border-b flex items-center gap-3 ${dark ? "bg-gray-900 border-gray-800" : "bg-white border-gray-100"}`}>
-        <h1 className={`text-xl font-bold flex-1 ${dark ? "text-white" : "text-gray-900"}`}>ChatMe</h1>
-        <button onClick={() => setSearchOpen((s) => !s)}>
-          <Search size={20} className="text-green-500" />
+    <div className="flex flex-col h-full relative">
+      {/* Top Header */}
+      <header className="px-4 pt-3.5 pb-2.5 bg-[#0B101B] border-b border-slate-800/80 text-white shrink-0 sticky top-0 z-20 shadow-sm">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <Logo size={36} rounded="rounded-xl" shadow="shadow-md shadow-emerald-500/10" />
+            <div className="flex flex-col">
+              <span className="text-xl font-black tracking-tight bg-gradient-to-r from-white via-slate-100 to-slate-300 bg-clip-text text-transparent">
+                ChatMe
+              </span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setSearchOpen(s => !s)}
+              className={`p-2 rounded-xl transition-colors ${searchOpen ? "bg-white/15 text-emerald-400" : "text-slate-300 hover:text-white hover:bg-white/10"}`}
+              title="Search"
+              aria-label="Search"
+            >
+              <Search size={20} />
+            </button>
+
+            <div className="relative">
+              <button
+                onClick={() => setMenuOpen(s => !s)}
+                className={`p-2 rounded-xl transition-colors ${menuOpen ? "bg-white/15 text-white" : "text-slate-300 hover:text-white hover:bg-white/10"}`}
+                title="More options"
+                aria-label="More options"
+              >
+                <MoreVertical size={20} />
+              </button>
+
+              {/* Three-dot dropdown menu */}
+              {menuOpen && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} />
+                  <div className="absolute right-0 top-full mt-1.5 w-52 rounded-2xl bg-[#0F172A] border border-slate-700/80 shadow-2xl py-1.5 z-50 text-slate-200 overflow-hidden animate-in fade-in zoom-in-95 duration-100">
+                    <button
+                      onClick={() => { setMenuOpen(false); onNewGroup?.(); }}
+                      className="w-full flex items-center gap-3 px-4 py-2.5 text-xs font-medium hover:bg-white/10 text-left transition-colors"
+                    >
+                      <Users size={16} className="text-emerald-400" />
+                      <span>New Group</span>
+                    </button>
+                    <button
+                      onClick={() => { setMenuOpen(false); onAddContact?.(); }}
+                      className="w-full flex items-center gap-3 px-4 py-2.5 text-xs font-medium hover:bg-white/10 text-left transition-colors"
+                    >
+                      <UserPlus size={16} className="text-teal-400" />
+                      <span>Add Contact</span>
+                    </button>
+                    <button
+                      onClick={() => { setMenuOpen(false); onOpenAI?.(); }}
+                      className="w-full flex items-center gap-3 px-4 py-2.5 text-xs font-medium hover:bg-white/10 text-left transition-colors"
+                    >
+                      <Sparkles size={16} className="text-cyan-400" />
+                      <span>AI Assistant</span>
+                    </button>
+                    <button
+                      onClick={() => { setMenuOpen(false); onOpenSupport?.(); }}
+                      className="w-full flex items-center gap-3 px-4 py-2.5 text-xs font-medium hover:bg-white/10 text-left transition-colors"
+                    >
+                      <Headphones size={16} className="text-emerald-400" />
+                      <span>Live Support</span>
+                    </button>
+                    <div className="my-1 border-t border-slate-800" />
+                    <button
+                      onClick={() => { setMenuOpen(false); onToggleDark?.(); }}
+                      className="w-full flex items-center gap-3 px-4 py-2.5 text-xs font-medium hover:bg-white/10 text-left transition-colors"
+                    >
+                      {dark ? <Sun size={16} className="text-amber-400" /> : <Moon size={16} className="text-indigo-400" />}
+                      <span>{dark ? "Light Mode" : "Dark Mode"}</span>
+                    </button>
+                    <button
+                      onClick={() => { setMenuOpen(false); onOpenSettings?.(); }}
+                      className="w-full flex items-center gap-3 px-4 py-2.5 text-xs font-medium hover:bg-white/10 text-left transition-colors"
+                    >
+                      <SettingsIcon size={16} className="text-slate-400" />
+                      <span>Settings</span>
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Search input (when opened) */}
+        {searchOpen && (
+          <div className="mt-2.5 mb-1 animate-in fade-in slide-in-from-top-1">
+            <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-slate-900 border border-slate-700/80">
+              <Search size={16} className="text-slate-400" />
+              <input
+                type="text"
+                value={query}
+                onChange={e => setQuery(e.target.value)}
+                placeholder="Search messages, contacts, groups..."
+                className="flex-1 bg-transparent text-sm text-white placeholder-slate-400 outline-none"
+                autoFocus
+              />
+              {query && (
+                <button onClick={() => setQuery("")} className="text-slate-400 hover:text-white">
+                  <X size={16} />
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Header Tabs: Chats, Groups, Calls */}
+        <div className="flex items-center gap-2 mt-3 pt-1 border-t border-slate-800/60">
+          <button
+            onClick={() => setHomeTab("chats")}
+            className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-bold transition-all ${
+              homeTab === "chats"
+                ? "bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-md shadow-emerald-500/25"
+                : "text-slate-400 hover:text-slate-200 hover:bg-white/5"
+            }`}
+          >
+            <span>Chats</span>
+            {totalUnreadChats > 0 && (
+              <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${homeTab === "chats" ? "bg-white text-emerald-700" : "bg-emerald-500 text-white"}`}>
+                {totalUnreadChats}
+              </span>
+            )}
+          </button>
+
+          <button
+            onClick={() => setHomeTab("groups")}
+            className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-bold transition-all ${
+              homeTab === "groups"
+                ? "bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-md shadow-emerald-500/25"
+                : "text-slate-400 hover:text-slate-200 hover:bg-white/5"
+            }`}
+          >
+            <span>Groups</span>
+            {groupUsers.length > 0 && (
+              <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-medium ${homeTab === "groups" ? "bg-white/20 text-white" : "bg-slate-800 text-slate-300"}`}>
+                {groupUsers.length}
+              </span>
+            )}
+          </button>
+
+          <button
+            onClick={() => setHomeTab("calls")}
+            className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-bold transition-all ${
+              homeTab === "calls"
+                ? "bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-md shadow-emerald-500/25"
+                : "text-slate-400 hover:text-slate-200 hover:bg-white/5"
+            }`}
+          >
+            <span>Calls</span>
+            {filteredCalls.length > 0 && (
+              <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-medium ${homeTab === "calls" ? "bg-white/20 text-white" : "bg-slate-800 text-slate-300"}`}>
+                {filteredCalls.length}
+              </span>
+            )}
+          </button>
+        </div>
+      </header>
+
+      {/* Main Tab Content */}
+      <div className={`flex-1 overflow-y-auto ${dark ? "bg-[#0B101B]" : "bg-white"}`}>
+        {/* TAB 1: CHATS */}
+        {homeTab === "chats" && (
+          <div>
+            {chatRows.length === 0 && (
+              <div className="flex flex-col items-center justify-center text-center px-6 py-16">
+                <div className="w-16 h-16 rounded-full bg-emerald-500/10 text-emerald-500 flex items-center justify-center mb-4">
+                  <MessageCircle size={32} />
+                </div>
+                <h3 className={`text-base font-bold mb-1 ${dark ? "text-white" : "text-slate-900"}`}>No conversations found</h3>
+                <p className="text-xs text-slate-400 max-w-xs mb-6">
+                  {query ? "No messages or contacts match your search." : "Start chatting with your contacts and friends on ChatMe."}
+                </p>
+                <button
+                  onClick={onStartChat}
+                  className="px-5 py-2.5 rounded-full bg-gradient-to-r from-emerald-500 to-teal-500 text-white text-xs font-bold shadow-lg shadow-emerald-500/25 active:scale-95 transition-transform"
+                >
+                  Start a Chat
+                </button>
+              </div>
+            )}
+
+            {chatRows.map(({ user, last, unread: u }) => {
+              const online = isUserOnline(user, onlinePresenceSet);
+              return (
+                <button
+                  key={user.id}
+                  onClick={() => openChat(user.id)}
+                  className={`w-full flex items-center gap-3.5 px-4 py-3.5 text-left border-b transition-colors ${
+                    dark
+                      ? "border-slate-800/80 hover:bg-slate-800/40 active:bg-slate-800/70"
+                      : "border-slate-100 hover:bg-slate-50/80 active:bg-slate-100/70"
+                  }`}
+                >
+                  {/* Circular profile picture with online indicator */}
+                  <div className="relative shrink-0">
+                    <img
+                      src={user.photo || getDefaultAvatar(user.fullname)}
+                      alt={user.fullname}
+                      onError={(e: any) => { e.target.src = getDefaultAvatar(user.fullname); }}
+                      className="w-13 h-13 rounded-full object-cover ring-2 ring-emerald-500/15"
+                      style={{ width: "50px", height: "50px" }}
+                    />
+                    {online && (
+                      <span
+                        title="Online"
+                        className="absolute bottom-0 right-0 w-3.5 h-3.5 rounded-full bg-emerald-500 border-2 border-white dark:border-[#0B101B] shadow-sm"
+                      />
+                    )}
+                  </div>
+
+                  {/* Name, last message, time, unread badge */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-1 mb-1">
+                      <span className={`text-[15px] font-bold truncate ${dark ? "text-white" : "text-slate-900"}`}>
+                        {user.fullname}
+                      </span>
+                      <span className="text-[11px] font-medium text-slate-400 shrink-0 ml-2">
+                        {last ? timeAgoLabel(last.timestamp) : ""}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1 min-w-0 flex-1">
+                        {last && last.senderId === currentUser?.id && (
+                          <span className="shrink-0">
+                            {last.status === "read" ? (
+                              <CheckCheck size={15} className="text-cyan-500 stroke-[2.5]" />
+                            ) : last.status === "delivered" ? (
+                              <CheckCheck size={15} className="text-slate-400 stroke-[2]" />
+                            ) : (
+                              <Check size={15} className="text-slate-400 stroke-[2]" />
+                            )}
+                          </span>
+                        )}
+                        <p className={`text-xs truncate leading-snug ${
+                          u > 0
+                            ? (dark ? "text-slate-200 font-semibold" : "text-slate-800 font-semibold")
+                            : "text-slate-400 dark:text-slate-400"
+                        }`}>
+                          {last ? (last.senderId === currentUser?.id ? "You: " : "") + last.text : "Tap to start chatting"}
+                        </p>
+                      </div>
+
+                      {u > 0 && (
+                        <span className="ml-2 shrink-0 min-w-[20px] h-5 px-1.5 rounded-full bg-gradient-to-r from-emerald-500 to-teal-500 text-white text-[11px] font-black flex items-center justify-center shadow-sm shadow-emerald-500/30">
+                          {u}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {/* TAB 2: GROUPS */}
+        {homeTab === "groups" && (
+          <div>
+            <div className={`p-4 border-b flex items-center justify-between ${dark ? "border-slate-800 bg-slate-900/40" : "border-slate-100 bg-slate-50/70"}`}>
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 text-white flex items-center justify-center shadow-md shadow-emerald-500/20">
+                  <Users size={20} />
+                </div>
+                <div>
+                  <h4 className={`text-sm font-bold ${dark ? "text-white" : "text-slate-900"}`}>Group Chats</h4>
+                  <p className="text-xs text-slate-400">{groupUsers.length} active groups</p>
+                </div>
+              </div>
+              <button
+                onClick={onNewGroup}
+                className="px-3.5 py-1.5 rounded-full bg-gradient-to-r from-emerald-500 to-teal-500 text-white text-xs font-bold shadow-md shadow-emerald-500/20 active:scale-95 transition-all"
+              >
+                + New Group
+              </button>
+            </div>
+
+            {groupRows.length === 0 ? (
+              <div className="flex flex-col items-center justify-center text-center px-6 py-16">
+                <div className="w-16 h-16 rounded-full bg-teal-500/10 text-teal-500 flex items-center justify-center mb-4">
+                  <Users size={32} />
+                </div>
+                <h3 className={`text-base font-bold mb-1 ${dark ? "text-white" : "text-slate-900"}`}>No groups yet</h3>
+                <p className="text-xs text-slate-400 max-w-xs mb-6">
+                  Create a group chat to connect, share, and message with multiple friends at once.
+                </p>
+                <button
+                  onClick={onNewGroup}
+                  className="px-5 py-2.5 rounded-full bg-gradient-to-r from-emerald-500 to-teal-500 text-white text-xs font-bold shadow-lg shadow-emerald-500/25 active:scale-95 transition-transform"
+                >
+                  Create Group
+                </button>
+              </div>
+            ) : (
+              groupRows.map(({ user, last, unread: u }) => (
+                <button
+                  key={user.id}
+                  onClick={() => openChat(user.id)}
+                  className={`w-full flex items-center gap-3.5 px-4 py-3.5 text-left border-b transition-colors ${
+                    dark
+                      ? "border-slate-800/80 hover:bg-slate-800/40 active:bg-slate-800/70"
+                      : "border-slate-100 hover:bg-slate-50/80 active:bg-slate-100/70"
+                  }`}
+                >
+                  <div className="relative shrink-0">
+                    <img
+                      src={user.photo || getDefaultAvatar(user.fullname)}
+                      alt={user.fullname}
+                      onError={(e: any) => { e.target.src = getDefaultAvatar(user.fullname); }}
+                      className="w-13 h-13 rounded-full object-cover ring-2 ring-teal-500/20"
+                      style={{ width: "50px", height: "50px" }}
+                    />
+                    <span className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-teal-600 text-white flex items-center justify-center text-[10px] font-bold border-2 border-white dark:border-[#0B101B]">
+                      👥
+                    </span>
+                  </div>
+
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-1 mb-1">
+                      <span className={`text-[15px] font-bold truncate ${dark ? "text-white" : "text-slate-900"}`}>
+                        {user.fullname}
+                      </span>
+                      <span className="text-[11px] font-medium text-slate-400 shrink-0 ml-2">
+                        {last ? timeAgoLabel(last.timestamp) : ""}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-xs text-slate-400 truncate leading-snug">
+                        {last ? (last.senderId === currentUser?.id ? "You: " : "") + last.text : `${(user.members || []).length + 1} members`}
+                      </p>
+
+                      {u > 0 && (
+                        <span className="ml-2 shrink-0 min-w-[20px] h-5 px-1.5 rounded-full bg-gradient-to-r from-emerald-500 to-teal-500 text-white text-[11px] font-black flex items-center justify-center shadow-sm shadow-emerald-500/30">
+                          {u}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </button>
+              ))
+            )}
+          </div>
+        )}
+
+        {/* TAB 3: CALLS */}
+        {homeTab === "calls" && (
+          <div>
+            <div className={`p-4 border-b flex items-center justify-between ${dark ? "border-slate-800 bg-slate-900/40" : "border-slate-100 bg-slate-50/70"}`}>
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-cyan-500 to-blue-600 text-white flex items-center justify-center shadow-md shadow-cyan-500/20">
+                  <Phone size={20} />
+                </div>
+                <div>
+                  <h4 className={`text-sm font-bold ${dark ? "text-white" : "text-slate-900"}`}>Call History</h4>
+                  <p className="text-xs text-slate-400">{filteredCalls.length} recent calls</p>
+                </div>
+              </div>
+            </div>
+
+            {filteredCalls.length === 0 ? (
+              <div className="flex flex-col items-center justify-center text-center px-6 py-16">
+                <div className="w-16 h-16 rounded-full bg-cyan-500/10 text-cyan-500 flex items-center justify-center mb-4">
+                  <Phone size={32} />
+                </div>
+                <h3 className={`text-base font-bold mb-1 ${dark ? "text-white" : "text-slate-900"}`}>No calls yet</h3>
+                <p className="text-xs text-slate-400 max-w-xs mb-6">
+                  Reach out to your contacts with crystal-clear voice and video calls.
+                </p>
+                <button
+                  onClick={onStartChat}
+                  className="px-5 py-2.5 rounded-full bg-gradient-to-r from-emerald-500 to-teal-500 text-white text-xs font-bold shadow-lg shadow-emerald-500/25 active:scale-95 transition-transform"
+                >
+                  Call a Contact
+                </button>
+              </div>
+            ) : (
+              filteredCalls.map((c: any) => {
+                const u = users.find((usr: any) => usr.id === c.userId);
+                if (!u) return null;
+                const DirIcon = c.missed ? PhoneMissed : c.direction === "incoming" ? PhoneIncoming : PhoneOutgoing;
+                const dirColor = c.missed ? "text-red-500" : "text-emerald-500";
+                return (
+                  <div
+                    key={c.id}
+                    className={`flex items-center gap-3.5 px-4 py-3.5 border-b transition-colors ${
+                      dark ? "border-slate-800/80 hover:bg-slate-800/30" : "border-slate-100 hover:bg-slate-50/60"
+                    }`}
+                  >
+                    <img
+                      src={u.photo || getDefaultAvatar(u.fullname)}
+                      alt={u.fullname}
+                      onError={(e: any) => { e.target.src = getDefaultAvatar(u.fullname); }}
+                      className="w-12 h-12 rounded-full object-cover ring-2 ring-slate-700/20"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <p className={`text-[15px] font-bold truncate ${c.missed ? "text-red-400" : dark ? "text-white" : "text-slate-900"}`}>
+                        {u.fullname}
+                      </p>
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <DirIcon size={14} className={dirColor} />
+                        <span className="text-xs text-slate-400">
+                          {c.timestamp}{c.duration ? ` · ${c.duration}` : ""}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => onCall?.(u, "voice")}
+                        className="w-9 h-9 rounded-full bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500 hover:text-white flex items-center justify-center transition-colors"
+                        title="Voice Call"
+                      >
+                        <Phone size={15} />
+                      </button>
+                      <button
+                        onClick={() => onCall?.(u, "video")}
+                        className="w-9 h-9 rounded-full bg-cyan-500/15 text-cyan-400 hover:bg-cyan-500 hover:text-white flex items-center justify-center transition-colors"
+                        title="Video Call"
+                      >
+                        <Video size={15} />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Floating Action Button (FAB) */}
+      <div className="fixed bottom-20 right-5 z-40">
+        <button
+          onClick={() => setFabMenuOpen(s => !s)}
+          aria-label="New chat or action"
+          className="w-14 h-14 rounded-full bg-gradient-to-tr from-emerald-500 via-teal-500 to-cyan-400 text-white flex items-center justify-center shadow-2xl shadow-emerald-500/40 hover:scale-105 active:scale-95 transition-transform"
+        >
+          <Plus size={26} strokeWidth={2.8} className={`transition-transform duration-200 ${fabMenuOpen ? "rotate-45" : ""}`} />
         </button>
       </div>
-      {searchOpen && (
-        <div className={`px-4 py-2 border-b ${dark ? "bg-gray-900 border-gray-800" : "bg-white border-gray-100"}`}>
-          <TextField icon={Search} placeholder="Search chats" value={query} onChange={(e) => setQuery(e.target.value)} dark={dark} />
-        </div>
+
+      {/* Floating Action Menu Modal / Sheet */}
+      {fabMenuOpen && (
+        <>
+          <div
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 transition-opacity"
+            onClick={() => setFabMenuOpen(false)}
+          />
+          <div className="fixed bottom-24 right-5 z-50 w-64 rounded-3xl bg-[#0F172A] border border-slate-700/80 shadow-2xl p-2.5 text-white animate-in slide-in-from-bottom-5 duration-200">
+            <div className="px-3 pt-2 pb-1.5 flex items-center justify-between border-b border-slate-800">
+              <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Quick Actions</span>
+              <button onClick={() => setFabMenuOpen(false)} className="text-slate-400 hover:text-white p-1">
+                <X size={15} />
+              </button>
+            </div>
+            <div className="flex flex-col gap-1 mt-1.5">
+              <button
+                onClick={() => { setFabMenuOpen(false); onStartChat?.(); }}
+                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-2xl hover:bg-white/10 active:bg-white/15 text-left transition-colors"
+              >
+                <div className="w-9 h-9 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
+                  <MessageCircle size={18} />
+                </div>
+                <div>
+                  <div className="text-xs font-bold">New Chat</div>
+                  <div className="text-[10px] text-slate-400">Message a contact</div>
+                </div>
+              </button>
+
+              <button
+                onClick={() => { setFabMenuOpen(false); onNewGroup?.(); }}
+                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-2xl hover:bg-white/10 active:bg-white/15 text-left transition-colors"
+              >
+                <div className="w-9 h-9 rounded-xl bg-teal-500/20 text-teal-400 flex items-center justify-center">
+                  <Users size={18} />
+                </div>
+                <div>
+                  <div className="text-xs font-bold">New Group</div>
+                  <div className="text-[10px] text-slate-400">Create a group chat</div>
+                </div>
+              </button>
+
+              <button
+                onClick={() => { setFabMenuOpen(false); onAddContact?.(); }}
+                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-2xl hover:bg-white/10 active:bg-white/15 text-left transition-colors"
+              >
+                <div className="w-9 h-9 rounded-xl bg-cyan-500/20 text-cyan-400 flex items-center justify-center">
+                  <UserPlus size={18} />
+                </div>
+                <div>
+                  <div className="text-xs font-bold">Add Contact</div>
+                  <div className="text-[10px] text-slate-400">Import or add manually</div>
+                </div>
+              </button>
+
+              <button
+                onClick={() => { setFabMenuOpen(false); onAddStatus?.(); }}
+                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-2xl hover:bg-white/10 active:bg-white/15 text-left transition-colors"
+              >
+                <div className="w-9 h-9 rounded-xl bg-purple-500/20 text-purple-400 flex items-center justify-center">
+                  <Camera size={18} />
+                </div>
+                <div>
+                  <div className="text-xs font-bold">Create Status</div>
+                  <div className="text-[10px] text-slate-400">Share photo, video or audio</div>
+                </div>
+              </button>
+
+              <button
+                onClick={() => { setFabMenuOpen(false); onOpenAI?.(); }}
+                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-2xl hover:bg-white/10 active:bg-white/15 text-left transition-colors"
+              >
+                <div className="w-9 h-9 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center">
+                  <Sparkles size={18} />
+                </div>
+                <div>
+                  <div className="text-xs font-bold">AI Assistant</div>
+                  <div className="text-[10px] text-slate-400">Ask Gemini anything</div>
+                </div>
+              </button>
+
+              <button
+                onClick={() => { setFabMenuOpen(false); onOpenSupport?.(); }}
+                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-2xl hover:bg-white/10 active:bg-white/15 text-left transition-colors"
+              >
+                <div className="w-9 h-9 rounded-xl bg-blue-500/20 text-blue-400 flex items-center justify-center">
+                  <Headphones size={18} />
+                </div>
+                <div>
+                  <div className="text-xs font-bold">Live Support</div>
+                  <div className="text-[10px] text-slate-400">24/7 Agent help</div>
+                </div>
+              </button>
+            </div>
+          </div>
+        </>
       )}
-      <div className={`flex-1 overflow-y-auto ${dark ? "bg-gray-900" : "bg-white"}`}>
-        {rows.length === 0 && (
-          <p className="text-center text-sm text-gray-400 mt-10">No chats found</p>
-        )}
-        {rows.map(({ user, last, unread: u }) => {
-          const online = isUserOnline(user, onlinePresenceSet);
-          return (
-            <button
-              key={user.id}
-              onClick={() => openChat(user.id)}
-              className={`w-full flex items-center gap-3 px-4 py-3 border-b ${dark ? "border-gray-800 active:bg-gray-800" : "border-gray-50 active:bg-gray-50"}`}
-            >
-              <div className="relative shrink-0">
-                <img src={user.photo} alt={user.fullname} className="w-12 h-12 rounded-xl object-cover" />
-                <AnimatePresence>
-                  {online && (
-                    <motion.span
-                      initial={{ scale: 0, opacity: 0 }}
-                      animate={{ scale: 1, opacity: 1 }}
-                      exit={{ scale: 0, opacity: 0 }}
-                      transition={{ type: "spring", stiffness: 500, damping: 30 }}
-                      className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-green-500 border-2 border-white"
-                    />
-                  )}
-                </AnimatePresence>
-              </div>
-              <div className="flex-1 min-w-0 text-left">
-                <div className="flex items-center justify-between">
-                  <span className={`text-sm font-semibold truncate ${dark ? "text-white" : "text-gray-900"}`}>{user.fullname}</span>
-                  <span className="text-[11px] text-gray-400 shrink-0 ml-2">{last ? timeAgoLabel(last.timestamp) : ""}</span>
-                </div>
-                <div className="flex items-center justify-between mt-0.5">
-                  <span className={`text-xs truncate ${u > 0 ? (dark ? "text-gray-200" : "text-gray-700") : "text-gray-400"}`}>
-                    {last ? (last.senderId === currentUser.id ? "You: " : "") + last.text : "Say hi 👋"}
-                  </span>
-                  {u > 0 && (
-                    <span className="ml-2 shrink-0 min-w-[18px] h-[18px] px-1 rounded-full bg-green-500 text-white text-[10px] font-bold flex items-center justify-center">
-                      {u}
-                    </span>
-                  )}
-                </div>
-              </div>
-            </button>
-          );
-        })}
-      </div>
     </div>
   );
 }
@@ -1268,15 +3505,15 @@ function ChatScreen({ contact, currentUser, messages, onSend, onReact, onBack, t
       <input type="file" ref={fileInputRef} accept="image/*,video/*" className="hidden" onChange={handleMediaUpload} />
       <input type="file" ref={cameraInputRef} accept="image/*" capture="environment" className="hidden" onChange={handleMediaUpload} />
 
-      <div className={`flex items-center gap-3 px-3 py-3 border-b ${dark ? "bg-gray-900 border-gray-800" : "bg-white border-gray-100"}`}>
-        <button onClick={onBack}>
-          <ArrowLeft size={20} className={dark ? "text-white" : "text-gray-700"} />
+      <div className="flex items-center gap-3 px-3 py-3 border-b bg-[#0B101B] border-slate-800/80 text-white shrink-0 sticky top-0 z-20 shadow-sm">
+        <button onClick={onBack} className="p-1.5 -ml-1 rounded-xl text-slate-300 hover:text-white hover:bg-white/10 active:bg-white/20 transition-colors" aria-label="Back">
+          <ArrowLeft size={20} />
         </button>
         <div 
           className="relative shrink-0 cursor-pointer"
           onClick={() => contact.isGroup && onEditGroup && onEditGroup(contact)}
         >
-          <img src={contact.photo} alt={contact.fullname} className="w-9 h-9 rounded-xl object-cover" />
+          <img src={contact.photo || getDefaultAvatar(contact.fullname)} alt={contact.fullname} className="w-10 h-10 rounded-full object-cover ring-2 ring-emerald-500/25" />
           <AnimatePresence>
             {online && !contact.isGroup && (
               <motion.span
@@ -1284,7 +3521,7 @@ function ChatScreen({ contact, currentUser, messages, onSend, onReact, onBack, t
                 animate={{ scale: 1, opacity: 1 }}
                 exit={{ scale: 0, opacity: 0 }}
                 transition={{ type: "spring", stiffness: 500, damping: 30 }}
-                className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-green-500 border-2 border-white"
+                className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-emerald-500 border-2 border-[#0B101B]"
               />
             )}
           </AnimatePresence>
@@ -1293,21 +3530,21 @@ function ChatScreen({ contact, currentUser, messages, onSend, onReact, onBack, t
           className="flex-1 min-w-0 cursor-pointer"
           onClick={() => contact.isGroup && onEditGroup && onEditGroup(contact)}
         >
-          <p className={`text-sm font-semibold truncate ${dark ? "text-white" : "text-gray-900"}`}>{contact.fullname}</p>
-          <p className="text-[11px] text-gray-400">
+          <p className="text-sm font-bold truncate text-white">{contact.fullname}</p>
+          <p className="text-[11px] text-slate-300">
             {typing
-              ? <span className="text-green-500">{contact.fullname} is typing…</span>
+              ? <span className="text-emerald-400 font-medium">{contact.fullname} is typing…</span>
               : contact.isGroup
-              ? `${(contact.members || []).length + 1} members (Tap to manage)`
+              ? `${(contact.members || []).length + 1} members`
               : online
-              ? "Online"
+              ? <span className="text-emerald-400 font-medium">Online</span>
               : formatLastSeen(contact.last_seen || contact.lastSeenRaw)}
           </p>
         </div>
         {contact.isGroup && (
           <button 
             onClick={() => onEditGroup && onEditGroup(contact)}
-            className={`p-2 rounded-xl transition ${dark ? "hover:bg-gray-800 text-gray-300" : "hover:bg-gray-100 text-gray-700"}`}
+            className="p-2 rounded-xl text-slate-300 hover:text-white hover:bg-white/10 transition"
             title="Manage Group Members"
           >
             <Users size={18} />
@@ -1323,10 +3560,10 @@ function ChatScreen({ contact, currentUser, messages, onSend, onReact, onBack, t
               showToast(`Calling ${contact?.fullname || 'contact'}…`);
             }
           }}
-          className="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition"
-          title="Call"
+          className="p-2 rounded-xl text-emerald-400 hover:text-emerald-300 hover:bg-white/10 transition"
+          title="Voice Call"
         >
-          <Phone size={18} className="text-[#25D366]" />
+          <Phone size={18} />
         </button>
         <button
           onClick={() => {
@@ -1336,13 +3573,13 @@ function ChatScreen({ contact, currentUser, messages, onSend, onReact, onBack, t
               showToast(`Starting video call with ${contact?.fullname || 'contact'}…`);
             }
           }}
-          className="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition"
+          className="p-2 rounded-xl text-cyan-400 hover:text-cyan-300 hover:bg-white/10 transition"
           title="Video Call"
         >
-          <Video size={18} className="text-blue-500" />
+          <Video size={18} />
         </button>
-        <button onClick={() => setShowGallery(true)} className="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition" title="View Gallery">
-          <ImageIcon size={18} className={dark ? "text-white" : "text-gray-700"} />
+        <button onClick={() => setShowGallery(true)} className="p-2 rounded-xl text-slate-300 hover:text-white hover:bg-white/10 transition" title="View Gallery">
+          <ImageIcon size={18} />
         </button>
       </div>
 
@@ -1359,68 +3596,126 @@ function ChatScreen({ contact, currentUser, messages, onSend, onReact, onBack, t
           <div className="absolute inset-0 bg-black/15 dark:bg-black/40 pointer-events-none z-0" />
         )}
         <div className="relative z-10 flex flex-col gap-2 flex-1">
-          {messages.map((m: any) => {
-            const mine = m.senderId === currentUser.id;
-            return (
-              <div key={m.id} className={`flex flex-col ${mine ? "items-end" : "items-start"}`}>
-                <div
-                  className={`max-w-[75%] rounded-xl px-3 py-2 text-sm relative ${
-                    mine ? "bg-green-500 text-white rounded-br-sm" : dark ? "bg-gray-800 text-gray-100 rounded-bl-sm" : "bg-white text-gray-800 rounded-bl-sm shadow-sm"
-                  }`}
-                  onMouseDown={() => startLongPress(m.id)}
-                  onMouseUp={clearTimer}
-                  onMouseLeave={clearTimer}
-                  onTouchStart={() => startLongPress(m.id)}
-                  onTouchEnd={clearTimer}
+          <AnimatePresence initial={false}>
+            {messages.map((m: any) => {
+              const mine = m.senderId === currentUser.id;
+              return (
+                <motion.div
+                  key={m.id}
+                  initial={{ opacity: 0, x: mine ? 20 : -20, y: 8, scale: 0.97 }}
+                  animate={{ opacity: 1, x: 0, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  transition={{ type: "spring", stiffness: 420, damping: 28 }}
+                  className={`flex flex-col ${mine ? "items-end" : "items-start"}`}
                 >
-                  {isImageUrl(m.text) ? (
-                    <img src={m.text} alt="chat" className="max-w-xs rounded-lg cursor-pointer" onClick={() => setLightbox(m.text)} />
-                  ) : isVideoUrl(m.text) ? (
-                    <video src={m.text} controls className="max-w-xs rounded-lg" />
-                  ) : m.text.startsWith("[VOICE:") ? (
-                    <div className="flex items-center gap-2">
-                      <Mic size={16} />
-                      <span>{m.text.replace("[VOICE:", "").replace("]", "")}</span>
-                    </div>
-                  ) : (
-                    m.text
-                  )}
-                  {m.reaction && <span className="absolute -bottom-2 -right-1 text-xs bg-white dark:bg-gray-800 px-0.5 rounded-full border shadow-sm">{m.reaction}</span>}
+                  <div
+                    className={`max-w-[75%] rounded-xl px-3 py-2 text-sm relative ${
+                      mine ? "bg-green-500 text-white rounded-br-sm" : dark ? "bg-gray-800 text-gray-100 rounded-bl-sm" : "bg-white text-gray-800 rounded-bl-sm shadow-sm"
+                    }`}
+                    onMouseDown={() => startLongPress(m.id)}
+                    onMouseUp={clearTimer}
+                    onMouseLeave={clearTimer}
+                    onTouchStart={() => startLongPress(m.id)}
+                    onTouchEnd={clearTimer}
+                  >
+                    {isImageUrl(m.text) ? (
+                      <img src={m.text} alt="chat" className="max-w-xs rounded-lg cursor-pointer" onClick={() => setLightbox(m.text)} />
+                    ) : isVideoUrl(m.text) ? (
+                      <video src={m.text} controls className="max-w-xs rounded-lg" />
+                    ) : m.text.startsWith("[VOICE:") ? (
+                      <div className="flex items-center gap-2">
+                        <Mic size={16} />
+                        <span>{m.text.replace("[VOICE:", "").replace("]", "")}</span>
+                      </div>
+                    ) : (
+                      m.text
+                    )}
+                    {m.reaction && <span className="absolute -bottom-2 -right-1 text-xs bg-white dark:bg-gray-800 px-0.5 rounded-full border shadow-sm">{m.reaction}</span>}
+                  </div>
+                  <div className="flex items-center gap-1 mt-0.5 px-1">
+                    <span className="text-[10px] text-gray-400">{m.timestamp}</span>
+                     {mine && (
+                       m.status === "read" ? <CheckCheck size={12} className="text-blue-500" /> :
+                       m.status === "delivered" ? <CheckCheck size={12} className="text-gray-400" /> :
+                       <Check size={12} className="text-gray-400" />
+                     )}
+                  </div>
+                </motion.div>
+              );
+            })}
+            {typing && (
+              <motion.div
+                initial={{ opacity: 0, x: -20, y: 8, scale: 0.95 }}
+                animate={{ opacity: 1, x: 0, y: 0, scale: 1 }}
+                exit={{ opacity: 0, x: -16, scale: 0.95 }}
+                transition={{ type: "spring", stiffness: 420, damping: 28 }}
+                className="flex items-start"
+              >
+                <div className={`rounded-xl rounded-bl-sm px-3 py-2 ${dark ? "bg-gray-800" : "bg-white shadow-sm"}`}>
+                  <div className="flex gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: "0ms" }} />
+                    <span className="w-1.5 h-1.5 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: "150ms" }} />
+                    <span className="w-1.5 h-1.5 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: "300ms" }} />
+                  </div>
                 </div>
-                <div className="flex items-center gap-1 mt-0.5 px-1">
-                  <span className="text-[10px] text-gray-400">{m.timestamp}</span>
-                   {mine && (
-                     m.status === "read" ? <CheckCheck size={12} className="text-blue-500" /> :
-                     m.status === "delivered" ? <CheckCheck size={12} className="text-gray-400" /> :
-                     <Check size={12} className="text-gray-400" />
-                   )}
-                </div>
-              </div>
-            );
-          })}
-          {typing && (
-            <div className="flex items-start">
-              <div className={`rounded-xl rounded-bl-sm px-3 py-2 ${dark ? "bg-gray-800" : "bg-white shadow-sm"}`}>
-                <div className="flex gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: "0ms" }} />
-                  <span className="w-1.5 h-1.5 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: "150ms" }} />
-                  <span className="w-1.5 h-1.5 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: "300ms" }} />
-                </div>
-              </div>
-            </div>
-          )}
+              </motion.div>
+            )}
+          </AnimatePresence>
           <div ref={endRef} />
         </div>
       </div>
 
       {menuOpenForId && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/20" onClick={() => setMenuOpenForId(null)}>
-          <div className={`rounded-xl p-3 flex gap-2 shadow-xl ${dark ? "bg-gray-800" : "bg-white"}`}>
-            {["❤️", "👍", "😂", "😮", "😢", "😡"].map(emoji => (
-              <button key={emoji} onClick={() => { onReact(menuOpenForId, emoji); setMenuOpenForId(null); }} className="text-xl hover:scale-125 transition-transform">{emoji}</button>
-            ))}
+        <AnimatePresence>
+          <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-[1px] p-4" onClick={() => setMenuOpenForId(null)}>
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0, y: 10 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              transition={{ type: "spring", stiffness: 400, damping: 28 }}
+              className={`rounded-2xl p-3 flex flex-col gap-2 shadow-2xl min-w-[240px] ${dark ? "bg-gray-800 text-white border border-gray-700" : "bg-white text-gray-900 border border-gray-100"}`}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Quick Reactions */}
+              <div className="flex items-center justify-between gap-1 pb-2 border-b border-gray-200 dark:border-gray-700">
+                {["❤️", "👍", "😂", "😮", "😢", "😡"].map(emoji => (
+                  <button 
+                    key={emoji} 
+                    onClick={() => { onReact(menuOpenForId, emoji); setMenuOpenForId(null); }} 
+                    className="text-xl hover:scale-125 transition-transform p-1"
+                    title={`React with ${emoji}`}
+                  >
+                    {emoji}
+                  </button>
+                ))}
+              </div>
+
+              {/* Copy Text Option */}
+              <button
+                onClick={() => {
+                  const targetMsg = messages.find((m: any) => m.id === menuOpenForId);
+                  if (targetMsg) {
+                    let textToCopy = targetMsg.text || "";
+                    if (textToCopy.startsWith("[VOICE:")) {
+                      textToCopy = "Voice Note: " + textToCopy.replace("[VOICE:", "").replace("]", "");
+                    }
+                    navigator.clipboard.writeText(textToCopy);
+                    if (showToast) {
+                      showToast("Message text copied to clipboard!");
+                    }
+                  }
+                  setMenuOpenForId(null);
+                }}
+                className={`flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm font-medium transition ${
+                  dark ? "hover:bg-gray-700 text-gray-200" : "hover:bg-gray-100 text-gray-800"
+                }`}
+              >
+                <Copy size={16} className="text-green-500 shrink-0" />
+                <span>Copy Text</span>
+              </button>
+            </motion.div>
           </div>
-        </div>
+        </AnimatePresence>
       )}
 
       {showEmojis && (
@@ -1451,21 +3746,24 @@ function ChatScreen({ contact, currentUser, messages, onSend, onReact, onBack, t
         </div>
       )}
 
-      <div className={`flex items-center gap-2 px-3 py-2.5 border-t ${dark ? "bg-gray-900 border-gray-800" : "bg-white border-gray-100"}`}>
-        <button onClick={() => setShowEmojis(s => !s)}><Smile size={20} className="text-gray-400" /></button>
-        <button onClick={() => fileInputRef.current?.click()}><Paperclip size={20} className="text-gray-400" /></button>
-        <button onClick={() => cameraInputRef.current?.click()}><Camera size={20} className="text-gray-400" /></button>
-        <button onMouseDown={startRecording} onMouseUp={stopRecording} onMouseLeave={stopRecording} onTouchStart={startRecording} onTouchEnd={stopRecording} className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${isRecording ? "bg-red-500" : "bg-gray-200"}`}>
-          <Mic size={16} className={isRecording ? "text-white" : "text-gray-600"} />
+      <div
+        className={`flex items-center gap-2 px-3 py-2.5 border-t z-20 ${dark ? "bg-[#0B101B] border-slate-800" : "bg-white border-slate-100"}`}
+        style={{ paddingBottom: "max(10px, env(safe-area-inset-bottom, 0px))" }}
+      >
+        <button onClick={() => setShowEmojis(s => !s)} className="p-1.5 text-slate-400 hover:text-emerald-500 transition-colors"><Smile size={20} /></button>
+        <button onClick={() => fileInputRef.current?.click()} className="p-1.5 text-slate-400 hover:text-emerald-500 transition-colors"><Paperclip size={20} /></button>
+        <button onClick={() => cameraInputRef.current?.click()} className="p-1.5 text-slate-400 hover:text-emerald-500 transition-colors"><Camera size={20} /></button>
+        <button onMouseDown={startRecording} onMouseUp={stopRecording} onMouseLeave={stopRecording} onTouchStart={startRecording} onTouchEnd={stopRecording} className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 transition-colors ${isRecording ? "bg-red-500" : "bg-slate-200 dark:bg-slate-800"}`}>
+          <Mic size={16} className={isRecording ? "text-white animate-pulse" : "text-slate-600 dark:text-slate-300"} />
         </button>
         <input
           value={isRecording ? "Recording..." : text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && send()}
-          placeholder="Message"
-          className={`flex-1 rounded-xl px-3 py-2 text-sm outline-none ${dark ? "bg-gray-800 text-white placeholder-gray-500" : "bg-gray-100 text-gray-800 placeholder-gray-400"}`}
+          placeholder="Type a message..."
+          className={`flex-1 rounded-full px-4 py-2 text-sm outline-none transition-all ${dark ? "bg-slate-800 text-white placeholder-slate-400 focus:ring-1 focus:ring-emerald-500" : "bg-slate-100 text-slate-900 placeholder-slate-400 focus:ring-1 focus:ring-emerald-500"}`}
         />
-        <button onClick={send} className="w-9 h-9 rounded-xl bg-green-500 flex items-center justify-center shrink-0">
+        <button onClick={send} className="w-10 h-10 rounded-full bg-gradient-to-r from-emerald-500 to-teal-500 text-white flex items-center justify-center shrink-0 shadow-md shadow-emerald-500/25 active:scale-90 transition-transform">
           <Send size={16} className="text-white" />
         </button>
       </div>
@@ -1998,35 +4296,179 @@ function CallsScreen({ calls, users, dark, onCall }) {
 
 import { QRCodeSVG } from "qrcode.react";
 
-function ProfileScreen({ user, goEdit, goSettings, onLogout, dark }) {
-  return (
-    <div className={`flex flex-col h-full overflow-y-auto ${dark ? "bg-gray-900" : "bg-white"}`}>
-      <ScreenHeader title="Profile" dark={dark} />
-      <div className="flex flex-col items-center py-8 px-6">
-        <img src={user.photo} alt={user.fullname} className="w-24 h-24 rounded-xl object-cover shadow-md" />
-        <h2 className={`text-lg font-bold mt-4 ${dark ? "text-white" : "text-gray-900"}`}>{user.fullname}</h2>
-        <p className="text-sm text-gray-400">{user.email}</p>
-        <div className={`mt-6 p-3 rounded-xl ${dark ? "bg-white" : "bg-white"}`}>
-           <QRCodeSVG value={`${user.fullname} | ${user.email}`} size={128} />
-        </div>
-        {user.bio && <p className={`text-sm text-center mt-3 ${dark ? "text-gray-300" : "text-gray-600"}`}>{user.bio}</p>}
-        {user.phone && <p className="text-sm text-gray-400 mt-1">{user.phone}</p>}
-      </div>
+function ProfileScreen({ user, goEdit, goSettings, goPrivacy, goNotifications, goHelpAndSupport, onLogout, dark }: any) {
+  const [showQr, setShowQr] = useState(false);
 
-      <div className="px-6 flex flex-col gap-3 pb-8">
-        <PrimaryButton onClick={goEdit} color="green">Edit Profile</PrimaryButton>
-        <button
-          onClick={goSettings}
-          className={`w-full flex items-center gap-3 rounded-xl border px-4 py-3 text-sm font-medium ${dark ? "border-gray-700 text-gray-200" : "border-gray-200 text-gray-700"}`}
-        >
-          <SettingsIcon size={18} className="text-blue-500" /> Settings
-        </button>
-        <button
-          onClick={onLogout}
-          className="w-full flex items-center gap-3 rounded-xl border border-red-200 px-4 py-3 text-sm font-medium text-red-500"
-        >
-          <LogOut size={18} /> Logout
-        </button>
+  return (
+    <div className={`flex flex-col h-full overflow-y-auto ${dark ? "bg-[#0B101B]" : "bg-slate-50"}`}>
+      <ScreenHeader title="My Profile" dark={dark} />
+
+      <div className="p-4 flex flex-col gap-4 pb-24">
+        {/* Profile Card */}
+        <div className={`rounded-3xl p-6 flex flex-col items-center text-center shadow-lg border relative ${
+          dark ? "bg-slate-900/80 border-slate-800" : "bg-white border-slate-100"
+        }`}>
+          {/* Avatar with emerald ring */}
+          <div className="relative mb-3.5">
+            <img
+              src={user.photo || getDefaultAvatar(user.fullname)}
+              alt={user.fullname}
+              onError={(e: any) => { e.target.src = getDefaultAvatar(user.fullname); }}
+              className="w-24 h-24 rounded-full object-cover ring-4 ring-emerald-500/25 shadow-xl"
+            />
+            <button
+              onClick={goEdit}
+              className="absolute bottom-0 right-0 w-8 h-8 rounded-full bg-gradient-to-r from-emerald-500 to-teal-500 text-white flex items-center justify-center shadow-md active:scale-90 transition-transform border-2 border-white dark:border-[#0F172A]"
+              title="Edit Profile"
+            >
+              <Edit2 size={13} />
+            </button>
+          </div>
+
+          <h2 className={`text-xl font-extrabold tracking-tight ${dark ? "text-white" : "text-slate-900"}`}>
+            {user.fullname}
+          </h2>
+          <p className="text-xs font-semibold text-emerald-500 mt-0.5">
+            @{user.username || user.email?.split("@")[0] || "user"}
+          </p>
+          <p className="text-xs text-slate-400 mt-1">{user.email}</p>
+
+          {user.bio && (
+            <p className={`text-xs mt-3 px-4 py-2 rounded-2xl italic max-w-xs ${
+              dark ? "bg-slate-800/60 text-slate-300" : "bg-slate-50 text-slate-600"
+            }`}>
+              "{user.bio}"
+            </p>
+          )}
+
+          {user.phone && (
+            <div className="flex items-center gap-1.5 mt-2.5 text-xs text-slate-400">
+              <Phone size={12} className="text-emerald-500" />
+              <span>{user.phone}</span>
+            </div>
+          )}
+
+          {/* QR code toggle button */}
+          <button
+            onClick={() => setShowQr(s => !s)}
+            className={`mt-4 px-4 py-1.5 rounded-full text-xs font-semibold border flex items-center gap-2 transition-colors ${
+              dark ? "border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700" : "border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100"
+            }`}
+          >
+            <span>{showQr ? "Hide QR Code" : "Show My QR Code"}</span>
+          </button>
+
+          {showQr && (
+            <div className="mt-4 p-4 rounded-2xl bg-white shadow-md flex flex-col items-center animate-in fade-in zoom-in-95 duration-150">
+              <QRCodeSVG value={`chatme://user/${user.id || user.email}`} size={140} />
+              <span className="text-[10px] text-slate-500 font-semibold mt-2.5">Scan to chat with me on ChatMe</span>
+            </div>
+          )}
+        </div>
+
+        {/* Action Menu List */}
+        <div className={`rounded-3xl p-2 shadow-sm border flex flex-col divide-y ${
+          dark ? "bg-slate-900/80 border-slate-800 divide-slate-800" : "bg-white border-slate-100 divide-slate-100"
+        }`}>
+          <button
+            onClick={goEdit}
+            className={`w-full flex items-center gap-3.5 px-4 py-3.5 text-left text-sm font-semibold rounded-2xl transition-colors ${
+              dark ? "hover:bg-slate-800/60 text-slate-200" : "hover:bg-slate-50 text-slate-800"
+            }`}
+          >
+            <div className="w-9 h-9 rounded-xl bg-emerald-500/15 text-emerald-500 flex items-center justify-center shrink-0">
+              <User size={18} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="font-bold">Edit Profile</div>
+              <div className="text-xs text-slate-400 font-normal">Change name, photo, bio, and phone</div>
+            </div>
+            <ChevronRight size={16} className="text-slate-400 shrink-0" />
+          </button>
+
+          <button
+            onClick={goSettings}
+            className={`w-full flex items-center gap-3.5 px-4 py-3.5 text-left text-sm font-semibold rounded-2xl transition-colors ${
+              dark ? "hover:bg-slate-800/60 text-slate-200" : "hover:bg-slate-50 text-slate-800"
+            }`}
+          >
+            <div className="w-9 h-9 rounded-xl bg-teal-500/15 text-teal-500 flex items-center justify-center shrink-0">
+              <SettingsIcon size={18} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="font-bold">Settings</div>
+              <div className="text-xs text-slate-400 font-normal">Wallpaper, backup, restore & dark mode</div>
+            </div>
+            <ChevronRight size={16} className="text-slate-400 shrink-0" />
+          </button>
+
+          <button
+            onClick={goPrivacy || goSettings}
+            className={`w-full flex items-center gap-3.5 px-4 py-3.5 text-left text-sm font-semibold rounded-2xl transition-colors ${
+              dark ? "hover:bg-slate-800/60 text-slate-200" : "hover:bg-slate-50 text-slate-800"
+            }`}
+          >
+            <div className="w-9 h-9 rounded-xl bg-cyan-500/15 text-cyan-500 flex items-center justify-center shrink-0">
+              <Shield size={18} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="font-bold">Privacy</div>
+              <div className="text-xs text-slate-400 font-normal">Online status, last seen & read receipts</div>
+            </div>
+            <ChevronRight size={16} className="text-slate-400 shrink-0" />
+          </button>
+
+          <button
+            onClick={goNotifications || goSettings}
+            className={`w-full flex items-center gap-3.5 px-4 py-3.5 text-left text-sm font-semibold rounded-2xl transition-colors ${
+              dark ? "hover:bg-slate-800/60 text-slate-200" : "hover:bg-slate-50 text-slate-800"
+            }`}
+          >
+            <div className="w-9 h-9 rounded-xl bg-amber-500/15 text-amber-500 flex items-center justify-center shrink-0">
+              <Bell size={18} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="font-bold">Notifications</div>
+              <div className="text-xs text-slate-400 font-normal">Sounds, previews & alerts</div>
+            </div>
+            <ChevronRight size={16} className="text-slate-400 shrink-0" />
+          </button>
+
+          <button
+            onClick={goHelpAndSupport || goSettings}
+            className={`w-full flex items-center gap-3.5 px-4 py-3.5 text-left text-sm font-semibold rounded-2xl transition-colors ${
+              dark ? "hover:bg-slate-800/60 text-slate-200" : "hover:bg-slate-50 text-slate-800"
+            }`}
+          >
+            <div className="w-9 h-9 rounded-xl bg-indigo-500/15 text-indigo-400 flex items-center justify-center shrink-0">
+              <HelpCircle size={18} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="font-bold">Help & Support</div>
+              <div className="text-xs text-slate-400 font-normal">FAQ, live agent chat & contact</div>
+            </div>
+            <ChevronRight size={16} className="text-slate-400 shrink-0" />
+          </button>
+
+          <button
+            onClick={onLogout}
+            className="w-full flex items-center gap-3.5 px-4 py-3.5 text-left text-sm font-semibold rounded-2xl text-red-500 hover:bg-red-500/10 transition-colors"
+          >
+            <div className="w-9 h-9 rounded-xl bg-red-500/15 text-red-500 flex items-center justify-center shrink-0">
+              <LogOut size={18} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="font-bold">Logout</div>
+              <div className="text-xs text-red-400 font-normal">Sign out of ChatMe on this device</div>
+            </div>
+          </button>
+        </div>
+
+        {/* Brand Footer */}
+        <div className="flex flex-col items-center justify-center gap-1.5 pt-4 pb-2 opacity-80">
+          <Logo size={28} rounded="rounded-lg" shadow="shadow-none" />
+          <span className="text-xs font-bold text-slate-400">ChatMe • v1.0.0</span>
+        </div>
       </div>
     </div>
   );
@@ -2287,7 +4729,7 @@ function Toggle({ on, onChange }: any) {
   );
 }
 
-function SettingsScreen({ dark, setDark, notifications, setNotifications, onBack, goChangePw, goInfo, goPrivacy, onLogout, wallpaper, goWallpaper, goChats, goBackupRestore }: any) {
+function SettingsScreen({ dark, setDark, notifications, setNotifications, onBack, goChangePw, goInfo, goPrivacy, onLogout, wallpaper, goWallpaper, goChats, goBackupRestore, goLiveSupport, goHelpAndSupport }: any) {
   const wpLabel = wallpaper?.startsWith("data:")
     ? "Custom Photo"
     : (BUILTIN_WALLPAPERS[wallpaper]?.name || "Default");
@@ -2303,6 +4745,30 @@ function SettingsScreen({ dark, setDark, notifications, setNotifications, onBack
           </div>
           <Toggle on={dark} onChange={setDark} />
         </div>
+
+        {/* Live Support Direct Banner */}
+        <button
+          onClick={() => (goLiveSupport ? goLiveSupport() : goHelpAndSupport?.())}
+          className={`flex items-center justify-between rounded-xl px-4 py-3.5 border transition ${
+            dark
+              ? "bg-gradient-to-r from-emerald-950/70 to-gray-800 border-emerald-800/60 hover:bg-emerald-900/40"
+              : "bg-gradient-to-r from-emerald-50 to-teal-50 border-emerald-200 hover:bg-emerald-100/70"
+          }`}
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-emerald-500 text-white flex items-center justify-center shadow-xs">
+              <Headphones size={18} />
+            </div>
+            <div className="text-left">
+              <div className="flex items-center gap-1.5">
+                <span className={`text-sm font-bold block ${dark ? "text-white" : "text-emerald-950"}`}>Live Support</span>
+                <span className="bg-emerald-500 text-white text-[9px] px-1.5 py-0.2 rounded-full font-bold uppercase">Online</span>
+              </div>
+              <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">Chat with support agents 24/7</span>
+            </div>
+          </div>
+          <ChevronRight size={16} className="text-emerald-500" />
+        </button>
         
         {/* Chats Settings (Wallpaper, Backup & Restore) */}
         <button
@@ -2359,8 +4825,8 @@ function SettingsScreen({ dark, setDark, notifications, setNotifications, onBack
         {[
           { icon: Shield, label: "Privacy", action: () => (goPrivacy ? goPrivacy() : goInfo("privacy")) },
           { icon: KeyRound, label: "Change Password", action: goChangePw },
+          { icon: HelpCircle, label: "Help & Support", action: () => (goHelpAndSupport ? goHelpAndSupport() : goInfo("help")) },
           { icon: Info, label: "About", action: () => goInfo("about") },
-          { icon: HelpCircle, label: "Help", action: () => goInfo("help") },
         ].map(({ icon: Icon, label, action }) => (
           <button
             key={label}
@@ -2379,6 +4845,11 @@ function SettingsScreen({ dark, setDark, notifications, setNotifications, onBack
           <LogOut size={18} className="text-red-500" />
           <span className="text-sm font-medium text-red-500">Logout</span>
         </button>
+
+        <div className="flex flex-col items-center justify-center pt-6 pb-4 gap-2">
+          <Logo size={48} rounded="rounded-xl" shadow="shadow-md" className="w-12 h-12" />
+          <span className={`text-xs font-semibold ${dark ? "text-gray-400" : "text-gray-500"}`}>ChatMe v1.0.0</span>
+        </div>
       </div>
     </div>
   );
@@ -2403,6 +4874,13 @@ function InfoScreen({ kind, onBack, dark }) {
   return (
     <div className={`flex flex-col h-full overflow-y-auto ${dark ? "bg-gray-900" : "bg-white"}`}>
       <ScreenHeader title={content.title} onBack={onBack} dark={dark} />
+      {kind === "about" && (
+        <div className="flex flex-col items-center pt-8 pb-2">
+          <Logo size={80} dark={dark} />
+          <h2 className={`text-lg font-bold mt-3 ${dark ? "text-white" : "text-gray-900"}`}>ChatMe</h2>
+          <p className="text-xs text-emerald-500 font-semibold mt-0.5">CONNECT • CHAT • SHARE</p>
+        </div>
+      )}
       <p className={`px-6 py-6 text-sm leading-relaxed ${dark ? "text-gray-300" : "text-gray-600"}`}>{content.body}</p>
     </div>
   );
@@ -2428,7 +4906,15 @@ export default function App() {
   const [wallpaper, setWallpaper] = useState("default");
   const [selectedContactsForGroup, setSelectedContactsForGroup] = useState([]);
   const [editingGroup, setEditingGroup] = useState(null);
-  const [statuses, setStatuses] = useState<any[]>([]);
+  const [statuses, setStatuses] = useState<any[]>(() => {
+    try {
+      const saved = localStorage.getItem("chatme_statuses");
+      if (saved) {
+        return filterFreshStatuses(JSON.parse(saved));
+      }
+    } catch (e) {}
+    return [];
+  });
   const [onlinePresenceSet, setOnlinePresenceSet] = useState<Set<string>>(new Set());
   const [deviceContacts, setDeviceContacts] = useState<DeviceContact[]>([]);
   const [contactsPermissionGranted, setContactsPermissionGranted] = useState<boolean>(false);
@@ -2446,7 +4932,10 @@ export default function App() {
   };
 
   const handleAccessDeviceContacts = async () => {
-    if ('contacts' in navigator && (navigator.contacts as any).select) {
+    const isTopFrame = typeof window !== 'undefined' && window.self === window.top;
+    const hasWebContacts = typeof navigator !== 'undefined' && 'contacts' in navigator && typeof (navigator.contacts as any)?.select === 'function';
+
+    if (hasWebContacts && isTopFrame) {
       try {
         const props = ['name', 'tel', 'email'];
         const opts = { multiple: true };
@@ -2471,8 +4960,15 @@ export default function App() {
           return true;
         }
       } catch (e: any) {
-        console.log('Contact Picker cancelled or error', e);
+        const errMsg = e?.message || String(e);
+        if (errMsg.includes('top frame') || errMsg.includes('SecurityError')) {
+          showToast("Device contact sync is available in the native app or top-level browser tab.");
+        } else {
+          console.log('Contact Picker cancelled or dismissed');
+        }
       }
+    } else if (!isTopFrame) {
+      showToast("Device contact sync is available in the native ChatMe app or top-level browser tab. You can add contacts manually.");
     }
 
     setContactsPermissionGranted(true);
@@ -2481,7 +4977,6 @@ export default function App() {
         localStorage.setItem(`chatme_contacts_perm_${currentUser.id}`, "true");
       } catch (e) {}
     }
-    showToast("Contacts access requested. Add phone contacts or import .vcf files below.");
     return false;
   };
 
@@ -2511,40 +5006,108 @@ export default function App() {
     }
   };
 
+  const mergeAndSetUsers = async (activeUser?: any) => {
+    const userMap = new Map<string, any>();
+
+    const localUsers = getLocalRegisteredUsers();
+    localUsers.forEach((u) => {
+      const uid = u.id || `usr_${u.email}`;
+      const emailKey = u.email ? u.email.toLowerCase() : uid;
+      userMap.set(emailKey, {
+        id: uid,
+        fullname: u.fullname || u.full_name || "User",
+        email: u.email || "",
+        photo: u.photo || u.avatar_url || getDefaultAvatar(u.fullname || u.email),
+        bio: u.bio || "Hey there! I am using ChatMe",
+        phone: u.phone || "",
+        online: u.online !== undefined ? Boolean(u.online) : false,
+        last_seen: u.last_seen || null,
+        lastSeenRaw: u.last_seen || null,
+        lastSeen: formatLastSeen(u.last_seen)
+      });
+    });
+
+    try {
+      const { data: allProfiles } = await supabase.from('profiles').select('*');
+      if (allProfiles && allProfiles.length > 0) {
+        allProfiles.forEach((p) => {
+          const uid = p.id || p.user_id;
+          const emailKey = p.email ? p.email.toLowerCase() : uid;
+          const existing = userMap.get(emailKey) || {};
+
+          userMap.set(emailKey, {
+            ...existing,
+            id: uid || existing.id,
+            fullname: p.full_name || p.fullname || p.name || existing.fullname || "User",
+            email: p.email || existing.email || "",
+            photo: p.avatar_url || p.photo || existing.photo || getDefaultAvatar(p.full_name || p.fullname),
+            bio: p.bio || existing.bio || "Hey there! I am using ChatMe",
+            phone: p.phone || existing.phone || "",
+            online: p.online !== undefined ? Boolean(p.online) : (existing.online ?? false),
+            last_seen: p.last_seen || existing.last_seen || null,
+            lastSeenRaw: p.last_seen || existing.last_seen || null,
+            lastSeen: formatLastSeen(p.last_seen || existing.last_seen)
+          });
+        });
+      }
+    } catch (e) {}
+
+    const targetUser = activeUser || currentUser;
+    if (targetUser?.email) {
+      const emailKey = targetUser.email.toLowerCase();
+      const existing = userMap.get(emailKey) || {};
+      userMap.set(emailKey, {
+        ...existing,
+        ...targetUser,
+        id: targetUser.id || existing.id
+      });
+    } else if (targetUser?.id) {
+      userMap.set(targetUser.id, targetUser);
+    }
+
+    setUsers(Array.from(userMap.values()));
+  };
+
   const loadUserData = async (authUser) => {
     try {
-      let { data: profile } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', authUser.id)
-        .single();
-
-      if (!profile) {
-        const { data: profileByEmail } = await supabase
+      let profile: any = null;
+      try {
+        const { data } = await supabase
           .from('profiles')
           .select('*')
-          .eq('email', authUser.email)
+          .eq('id', authUser.id)
           .single();
+        profile = data;
+      } catch (e) {}
 
-        if (profileByEmail) {
-          profile = profileByEmail;
-        } else {
-          const newProfile = {
-            id: authUser.id,
-            user_id: authUser.id,
-            full_name: authUser.user_metadata?.full_name || authUser.user_metadata?.fullname || authUser.email?.split('@')[0] || 'User',
-            fullname: authUser.user_metadata?.full_name || authUser.user_metadata?.fullname || authUser.email?.split('@')[0] || 'User',
-            email: authUser.email,
-            avatar_url: authUser.user_metadata?.avatar_url || authUser.user_metadata?.photo || getDefaultAvatar(authUser.email),
-            photo: authUser.user_metadata?.avatar_url || authUser.user_metadata?.photo || getDefaultAvatar(authUser.email),
-            bio: "Hey there! I am using ChatMe",
-            phone: "",
-            online: true,
-            created_at: new Date().toISOString()
-          };
-          await supabase.from('profiles').upsert(newProfile);
-          profile = newProfile;
-        }
+      if (!profile) {
+        try {
+          const { data: profileByEmail } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('email', authUser.email)
+            .single();
+          if (profileByEmail) profile = profileByEmail;
+        } catch (e) {}
+      }
+
+      if (!profile) {
+        profile = {
+          id: authUser.id,
+          user_id: authUser.id,
+          full_name: authUser.user_metadata?.full_name || authUser.user_metadata?.fullname || authUser.email?.split('@')[0] || 'User',
+          fullname: authUser.user_metadata?.full_name || authUser.user_metadata?.fullname || authUser.email?.split('@')[0] || 'User',
+          email: authUser.email,
+          avatar_url: authUser.user_metadata?.avatar_url || authUser.user_metadata?.photo || getDefaultAvatar(authUser.email),
+          photo: authUser.user_metadata?.avatar_url || authUser.user_metadata?.photo || getDefaultAvatar(authUser.email),
+          bio: "Hey there! I am using ChatMe",
+          phone: "",
+          online: true,
+          created_at: new Date().toISOString()
+        };
+        try {
+          await supabase.from('profiles').upsert(profile);
+        } catch (e) {}
       }
 
       const formattedUser = {
@@ -2559,6 +5122,10 @@ export default function App() {
       };
 
       setCurrentUser(formattedUser);
+      saveLocalRegisteredUser(formattedUser);
+      try {
+        localStorage.setItem("chatme_current_user", JSON.stringify(formattedUser));
+      } catch (e) {}
 
       try {
         const savedWp = localStorage.getItem(`chatme_wallpaper_${formattedUser.id}`);
@@ -2574,43 +5141,30 @@ export default function App() {
       } catch (e) {}
 
       const nowIso = new Date().toISOString();
-      await supabase
-        .from('profiles')
-        .update({ online: true, last_seen: nowIso })
-        .eq('id', profile.id || authUser.id);
+      try {
+        await supabase
+          .from('profiles')
+          .update({ online: true, last_seen: nowIso })
+          .eq('id', profile.id || authUser.id);
+      } catch (e) {}
 
-      const { data: allProfiles } = await supabase.from('profiles').select('*');
-      if (allProfiles && allProfiles.length > 0) {
-        setUsers(allProfiles.map(p => ({
-          id: p.id || p.user_id,
-          fullname: p.full_name || p.fullname || p.name || "User",
-          email: p.email || "",
-          photo: p.avatar_url || p.photo || getDefaultAvatar(p.full_name || p.fullname),
-          bio: p.bio || "Hey there! I am using ChatMe",
-          phone: p.phone || "",
-          online: p.online !== undefined ? Boolean(p.online) : false,
-          last_seen: p.last_seen || null,
-          lastSeenRaw: p.last_seen || null,
-          lastSeen: formatLastSeen(p.last_seen)
-        })));
-      } else {
-        setUsers([formattedUser]);
-      }
+      await mergeAndSetUsers(formattedUser);
 
       await cleanupExpiredStatuses();
-      const { data: statusData } = await supabase.from('status_posts').select('*');
-      if (statusData && statusData.length > 0) {
-        setStatuses(filterFreshStatuses(statusData));
-      } else {
-        setStatuses([]);
-      }
+      try {
+        const { data: statusData } = await supabase.from('status_posts').select('*');
+        if (statusData && statusData.length > 0) {
+          setStatuses(filterFreshStatuses(statusData));
+        } else {
+          setStatuses([]);
+        }
+      } catch (e) {}
 
-      // Check and execute scheduled automatic backup if due
       try {
         checkAndRunAutoBackup(formattedUser, messagesData, {
-          wallpaper: savedWp || 'default',
+          wallpaper: wallpaper || 'default',
           notifications,
-          deviceContacts: savedContacts ? JSON.parse(savedContacts) : []
+          deviceContacts: deviceContacts || []
         });
       } catch (e) {}
 
@@ -2627,10 +5181,29 @@ export default function App() {
       if (session?.user) {
         loadUserData(session.user);
       } else {
+        try {
+          const savedCurrent = localStorage.getItem("chatme_current_user");
+          if (savedCurrent) {
+            const parsed = JSON.parse(savedCurrent);
+            setCurrentUser(parsed);
+            mergeAndSetUsers(parsed);
+            setScreen("home");
+            return;
+          }
+        } catch (e) {}
         setScreen("signin");
       }
-    }).catch((err) => {
-      console.error("Session fetch error:", err);
+    }).catch(() => {
+      try {
+        const savedCurrent = localStorage.getItem("chatme_current_user");
+        if (savedCurrent) {
+          const parsed = JSON.parse(savedCurrent);
+          setCurrentUser(parsed);
+          mergeAndSetUsers(parsed);
+          setScreen("home");
+          return;
+        }
+      } catch (e) {}
       setScreen("signin");
     });
 
@@ -2638,13 +5211,36 @@ export default function App() {
       if (session?.user) {
         loadUserData(session.user);
       } else {
-        setCurrentUser(null);
-        setScreen("signin");
+        try {
+          const savedCurrent = localStorage.getItem("chatme_current_user");
+          if (!savedCurrent) {
+            setCurrentUser(null);
+            setScreen("signin");
+          }
+        } catch (e) {}
       }
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      try {
+        subscription?.unsubscribe?.();
+      } catch (e) {}
+    };
   }, []);
+
+  // Redirect authenticated users away from auth screens (SignIn/SignUp) to the home screen
+  useEffect(() => {
+    if (screen === "signin" || screen === "signup") {
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        if (session?.user) {
+          loadUserData(session.user);
+          setScreen("home");
+        } else if (currentUser) {
+          setScreen("home");
+        }
+      }).catch(() => {});
+    }
+  }, [screen, currentUser]);
 
   useEffect(() => {
     try {
@@ -2682,6 +5278,21 @@ export default function App() {
         supabase.removeChannel(channel);
       };
     } catch (e) {}
+  }, []);
+
+  useEffect(() => {
+    const handleStatusHash = () => {
+      const hash = window.location.hash;
+      if (hash.startsWith("#status-")) {
+        const sid = hash.replace("#status-", "");
+        if (sid) {
+          setScreen("statusView:" + sid);
+        }
+      }
+    };
+    handleStatusHash();
+    window.addEventListener("hashchange", handleStatusHash);
+    return () => window.removeEventListener("hashchange", handleStatusHash);
   }, []);
 
   useEffect(() => {
@@ -2853,28 +5464,57 @@ export default function App() {
     };
   }, [currentUser?.id]);
 
-  const handleAddStatus = async (newStatus) => {
-    const statusWithId = { ...newStatus, id: Date.now() };
-    setStatuses(prev => [statusWithId, ...prev]);
+  const handleAddStatus = async (newStatus: any) => {
+    const statusWithId = {
+      ...newStatus,
+      id: newStatus.id || Date.now(),
+      user_id: newStatus.user_id || currentUser?.id,
+      user_name: newStatus.user_name || currentUser?.fullname || "Me",
+      user_photo: newStatus.user_photo || currentUser?.photo || getDefaultAvatar(currentUser?.fullname)
+    };
+
+    setStatuses(prev => {
+      const filtered = prev.filter(s => String(s.id) !== String(statusWithId.id));
+      const updated = [statusWithId, ...filtered];
+      try {
+        localStorage.setItem("chatme_statuses", JSON.stringify(updated));
+      } catch (e) {}
+      return updated;
+    });
+
     showToast("Status posted successfully!");
 
+    // If the status was already persisted to Supabase status_posts (e.g. by StatusEditor), do not duplicate insert
+    if (newStatus.alreadyPersisted) {
+      return;
+    }
+
     try {
-      await supabase.from('status_posts').insert({
-        user_id: newStatus.user_id,
-        media_type: newStatus.media_type,
-        media_url: newStatus.media_url,
-        caption: newStatus.caption,
-        bg_color: newStatus.bg_color || null,
-        created_at: newStatus.created_at,
-        expires_at: newStatus.expires_at
-      });
+      const { data: sessionData } = await supabase.auth.getSession();
+      const authUser = sessionData?.session?.user;
+      if (authUser) {
+        await supabase.from('status_posts').insert({
+          user_id: authUser.id,
+          media_type: statusWithId.media_type || (statusWithId.bg_color ? 'text' : 'image'),
+          media_url: statusWithId.media_url || null,
+          caption: statusWithId.caption || "",
+          created_at: statusWithId.created_at || new Date().toISOString(),
+          expires_at: statusWithId.expires_at || new Date(Date.now() + 86400000).toISOString()
+        });
+      }
     } catch (e) {
-      console.log("Supabase insert status fallback", e);
+      console.log("Supabase insert status notice", e);
     }
   };
 
-  const handleDeleteStatus = async (id) => {
-    setStatuses(prev => prev.filter(s => s.id !== id));
+  const handleDeleteStatus = async (id: any) => {
+    setStatuses(prev => {
+      const updated = prev.filter(s => String(s.id) !== String(id));
+      try {
+        localStorage.setItem("chatme_statuses", JSON.stringify(updated));
+      } catch (e) {}
+      return updated;
+    });
     showToast("Status deleted");
     try {
       await supabase.from('status_posts').delete().eq('id', id);
@@ -2915,70 +5555,221 @@ export default function App() {
     setTimeout(() => setToast(""), 2000);
   };
 
-  const handleSignUp = async ({ fullname, email, password, photo, bio, phone }) => {
+  const handleSignUp = async ({ fullname, username, email, password, photo, bio, phone }: any) => {
+    // Check if a user session is already active in Supabase before proceeding with sign up
+    try {
+      const { data: { session: activeSession } } = await supabase.auth.getSession();
+      if (activeSession?.user) {
+        showToast("You are already signed in.");
+        await loadUserData(activeSession.user);
+        setScreen("home");
+        return;
+      }
+    } catch (e) {}
+
+    const cleanEmail = (email || "").trim().toLowerCase();
+    const cleanName = (fullname || "").trim();
+    const cleanUsername = (username || cleanEmail.split('@')[0] || 'user').trim();
+    const avatarUrl = photo || getDefaultAvatar(cleanName);
+
+    if (!cleanName) {
+      showToast("Please enter your full name.");
+      return;
+    }
+    if (!cleanEmail) {
+      showToast("Please enter a valid email address.");
+      return;
+    }
+    if (!password || password.length < 6) {
+      showToast("Password must be at least 6 characters long.");
+      return;
+    }
+
+    // Check if an account already exists locally with this email
+    const localUsers = getLocalRegisteredUsers();
+    const existingLocal = localUsers.find(
+      (u: any) => u.email?.toLowerCase() === cleanEmail
+    );
+
+    // Ensure any lingering Supabase auth session is cleared to prevent session state collision
+    try {
+      await supabase.auth.signOut();
+    } catch (e) {}
+
+    let supabaseSignUpSuccess = false;
+    let authUser: any = null;
+    let authSession: any = null;
+
     try {
       const { data, error } = await supabase.auth.signUp({
-        email,
+        email: cleanEmail,
         password,
         options: {
           data: {
-            full_name: fullname,
-            avatar_url: photo || getDefaultAvatar(fullname)
-          }
+            username: cleanUsername,
+            fullname: cleanName,
+            full_name: cleanName,
+            avatar_url: avatarUrl,
+            phone: phone || ""
+          },
+          emailRedirectTo: window.location.origin
         }
       });
+
       if (error) {
-        showToast(error.message);
-        return;
-      }
-      if (data.user) {
-        const profileData = {
-          id: data.user.id,
-          user_id: data.user.id,
-          full_name: fullname,
-          fullname,
-          email,
-          avatar_url: photo || getDefaultAvatar(fullname),
-          photo: photo || getDefaultAvatar(fullname),
-          bio: bio || "Hey there! I am using ChatMe",
-          phone: phone || "",
-          online: true,
-          created_at: new Date().toISOString()
-        };
-        await supabase.from('profiles').upsert(profileData);
-        showToast("Account created successfully!");
-        if (data.session) {
-          loadUserData(data.user);
+        const msg = (error.message || "").toLowerCase();
+        const isNetworkOrFetchError =
+          error.name === "AuthRetryableFetchError" ||
+          msg.includes("failed to fetch") ||
+          error.status === 0 ||
+          msg.includes("network") ||
+          msg.includes("fetch");
+
+        if (isNetworkOrFetchError) {
+          console.warn("Supabase auth service unreachable (offline or network error); proceeding with local account registration.");
+        } else if (
+          msg.includes("already registered") ||
+          msg.includes("already exists") ||
+          (error.status === 400 && msg.includes("user"))
+        ) {
+          const err: any = new Error("An account with this email address already exists. Please sign in.");
+          err.status = 400;
+          throw err;
         } else {
-          setScreen("signin");
+          throw error;
         }
+      } else if (data?.user) {
+        if (data.user.identities && data.user.identities.length === 0) {
+          const existingUserError: any = new Error("An account with this email address already exists. Please sign in.");
+          existingUserError.status = 400;
+          throw existingUserError;
+        }
+        supabaseSignUpSuccess = true;
+        authUser = data.user;
+        authSession = data.session;
       }
-    } catch (e: any) {
-      showToast(e.message || "Sign up failed");
+    } catch (err: any) {
+      const msg = (err?.message || "").toLowerCase();
+      const isNetworkOrFetchError =
+        err?.name === "AuthRetryableFetchError" ||
+        msg.includes("failed to fetch") ||
+        err?.status === 0 ||
+        msg.includes("network") ||
+        msg.includes("load failed") ||
+        err instanceof TypeError;
+
+      if (isNetworkOrFetchError) {
+        console.warn("Supabase auth network unreachable; proceeding with local account registration.");
+      } else {
+        throw err;
+      }
     }
+
+    // If Supabase remote signup succeeded:
+    if (supabaseSignUpSuccess && authUser) {
+      if (authSession) {
+        await loadUserData(authUser);
+        setScreen("home");
+        setActiveTab("chats");
+        showToast("Account created successfully!");
+      } else {
+        showToast("Registration successful! Please check your email to confirm your account before signing in.");
+        setScreen("signin");
+      }
+      return;
+    }
+
+    // Local / Offline fallback registration
+    if (existingLocal) {
+      const err: any = new Error("An account with this email address already exists. Please sign in.");
+      err.status = 400;
+      throw err;
+    }
+
+    const newLocalUser = {
+      id: `usr_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
+      fullname: cleanName,
+      username: cleanUsername,
+      email: cleanEmail,
+      password: password,
+      photo: avatarUrl,
+      avatar_url: avatarUrl,
+      bio: bio || "Hey there! I am using ChatMe",
+      phone: phone || "",
+      online: true,
+      created_at: new Date().toISOString()
+    };
+
+    saveLocalRegisteredUser(newLocalUser);
+    setCurrentUser(newLocalUser);
+    try {
+      localStorage.setItem("chatme_current_user", JSON.stringify(newLocalUser));
+    } catch (e) {}
+
+    await mergeAndSetUsers(newLocalUser);
+    setScreen("home");
+    setActiveTab("chats");
+    showToast("Account created successfully!");
   };
 
-  const handleSignIn = async ({ email, password }) => {
+  const handleSignIn = async ({ email, password }: any) => {
+    const cleanEmail = email.trim().toLowerCase();
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
-        email,
+        email: cleanEmail,
         password
       });
       if (error) {
-        showToast(error.message);
+        if (error.message.toLowerCase().includes("email not confirmed")) {
+          showToast("Please confirm your email address before signing in.");
+          return;
+        }
+        if (error.message.toLowerCase().includes("invalid login credentials")) {
+          showToast("Invalid email or password.");
+          return;
+        }
+      } else if (data?.user) {
+        await loadUserData(data.user);
+        showToast("Signed in successfully!");
         return;
       }
-      if (data.user) {
-        loadUserData(data.user);
-      }
-    } catch (e: any) {
-      showToast(e.message || "Sign in failed");
+    } catch (e: any) {}
+
+    const localUsers = getLocalRegisteredUsers();
+    const match = localUsers.find(
+      (u: any) => u.email?.toLowerCase() === cleanEmail && (!u.password || u.password === password)
+    );
+
+    if (match) {
+      const formattedUser = {
+        id: match.id || `usr_${match.email}`,
+        fullname: match.fullname || match.full_name || "User",
+        email: match.email,
+        photo: match.photo || match.avatar_url || getDefaultAvatar(match.fullname || match.email),
+        bio: match.bio || "Hey there! I am using ChatMe",
+        phone: match.phone || "",
+        online: true,
+        created_at: match.created_at || new Date().toISOString()
+      };
+      setCurrentUser(formattedUser);
+      try {
+        localStorage.setItem("chatme_current_user", JSON.stringify(formattedUser));
+      } catch (e) {}
+      await mergeAndSetUsers(formattedUser);
+      setScreen("home");
+      setActiveTab("chats");
+      showToast("Signed in successfully!");
+    } else {
+      showToast("Invalid email or password.");
     }
   };
 
   const handleLogout = async () => {
     try {
       await supabase.auth.signOut();
+    } catch (e) {}
+    try {
+      localStorage.removeItem("chatme_current_user");
     } catch (e) {}
     setCurrentUser(null);
     setScreen("signin");
@@ -3350,6 +6141,38 @@ export default function App() {
         goWallpaper={() => setScreen("wallpaper")}
         goChats={() => setScreen("chatsSettings")}
         goBackupRestore={() => setScreen("backupRestore")}
+        goLiveSupport={() => setScreen("liveSupport")}
+        goHelpAndSupport={() => setScreen("helpAndSupport")}
+      />
+    );
+  } else if (screen === "helpAndSupport") {
+    body = (
+      <HelpAndSupportScreen
+        dark={dk}
+        onBack={() => setScreen("settings")}
+        onOpenLiveSupport={() => setScreen("liveSupport")}
+        onOpenAgentPortal={() => setScreen("supportAgent")}
+        onGoPrivacy={() => setScreen("privacy")}
+        showToast={showToast}
+      />
+    );
+  } else if (screen === "liveSupport") {
+    body = (
+      <LiveSupportScreen
+        currentUser={currentUser}
+        dark={dk}
+        onBack={() => setScreen("helpAndSupport")}
+        onOpenAgentPortal={() => setScreen("supportAgent")}
+        showToast={showToast}
+      />
+    );
+  } else if (screen === "supportAgent") {
+    body = (
+      <SupportAgentScreen
+        currentUser={currentUser}
+        dark={dk}
+        onBack={() => setScreen("helpAndSupport")}
+        showToast={showToast}
       />
     );
   } else if (screen === "chatsSettings") {
@@ -3430,14 +6253,35 @@ export default function App() {
   } else if (screen.startsWith("statusView:")) {
     const statusId = screen.split(":")[1];
     const targetStatus = statuses.find(s => String(s.id) === String(statusId)) || statuses[0];
-    body = <StatusViewScreen status={targetStatus} currentUser={currentUser} onBack={() => { setScreen("home"); setActiveTab("updates"); }} dark={dk} onDelete={handleDeleteStatus} onReply={handleReplyStatus} />;
+    body = <StatusViewScreen status={targetStatus} currentUser={currentUser} onBack={() => { setScreen("home"); setActiveTab("updates"); }} dark={dk} onDelete={handleDeleteStatus} onReply={handleReplyStatus} showToast={showToast} />;
   } else if (currentUser) {
     // main tabbed area
     let tabBody = null;
     if (activeTab === "chats")
-      tabBody = <HomeScreen users={users} currentUser={currentUser} messagesData={messagesData} unread={unread} openChat={openChat} dark={dk} onlinePresenceSet={onlinePresenceSet} />;
+      tabBody = (
+        <HomeScreen
+          users={users}
+          currentUser={currentUser}
+          messagesData={messagesData}
+          unread={unread}
+          openChat={openChat}
+          dark={dk}
+          onlinePresenceSet={onlinePresenceSet}
+          calls={calls}
+          onCall={handleCall}
+          onStartChat={() => { setActiveTab("contacts"); setScreen("home"); }}
+          onNewGroup={() => setScreen("contactsSelection")}
+          onAddContact={() => { setActiveTab("add-contact"); setScreen("add-contact"); }}
+          onAddStatus={() => { setActiveTab("updates"); setScreen("home"); }}
+          onOpenAI={() => { setActiveTab("ai"); setScreen("home"); }}
+          onOpenSupport={() => setScreen("liveSupport")}
+          onOpenSettings={() => setScreen("settings")}
+          onToggleDark={() => setDark((d: boolean) => !d)}
+          showToast={showToast}
+        />
+      );
     else if (activeTab === "updates")
-      tabBody = <UpdatesScreen dark={dk} currentUser={currentUser} statuses={statuses} onAddStatus={handleAddStatus} onViewStatus={(s) => setScreen("statusView:" + s.id)} onDeleteStatus={handleDeleteStatus} />;
+      tabBody = <UpdatesScreen dark={dk} currentUser={currentUser} statuses={statuses} onAddStatus={handleAddStatus} onViewStatus={(s) => setScreen("statusView:" + s.id)} onDeleteStatus={handleDeleteStatus} onUpdateStatuses={setStatuses} />;
     else if (activeTab === "add-contact")
       tabBody = (
         <AddContactScreen
@@ -3476,6 +6320,9 @@ export default function App() {
           user={currentUser}
           goEdit={() => setScreen("editProfile")}
           goSettings={() => setScreen("settings")}
+          goPrivacy={() => setScreen("privacy")}
+          goNotifications={() => setScreen("settings")}
+          goHelpAndSupport={() => setScreen("helpAndSupport")}
           onLogout={handleLogout}
           dark={dk}
         />
@@ -3483,21 +6330,41 @@ export default function App() {
     body = (
       <div className="flex flex-col h-full">
         <div className="flex-1 min-h-0">{tabBody}</div>
-        <BottomNav active={activeTab} onChange={(k) => { setActiveTab(k); setScreen(k); }} dark={dk} />
       </div>
     );
   }
 
+  const isAuthScreen = screen === "splash" || screen === "signin" || screen === "signup" || screen === "reset";
+  const isFullView = screen.startsWith("statusView:");
+  const isSubScreen = screen === "chat" || screen === "editProfile" || screen === "wallpaper" || screen === "groupCreation" || screen === "contactsSelection" || screen === "changePassword";
+  const showNav = Boolean(currentUser) && !isAuthScreen && !isFullView && !isSubScreen;
+
   return (
     <div
-      className={`w-full min-w-full h-full min-h-screen min-h-[100dvh] flex flex-col overflow-hidden ${
-        dk ? "bg-gray-900 text-white" : "bg-white text-gray-900"
+      className={`w-full h-[100dvh] min-h-[100dvh] flex flex-col items-center justify-center bg-[#070B14] text-white overflow-hidden relative ${
+        dk ? "dark" : ""
       }`}
       style={{ fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" }}
     >
       <Toast message={toast} />
-      <div className="w-full h-full min-h-0 flex-1 flex flex-col overflow-hidden relative">
-        {body}
+      <div className="w-full lg:max-w-md xl:max-w-lg h-full flex flex-col relative bg-white dark:bg-[#0B101B] text-slate-900 dark:text-white shadow-2xl overflow-hidden border-x border-slate-800/80">
+        <div className={`flex-1 w-full h-full min-h-0 overflow-y-auto relative ${showNav ? "pb-16" : ""}`}>
+          {body}
+        </div>
+        {showNav && (
+          <BottomNav
+            active={activeTab}
+            onChange={(key) => {
+              setActiveTab(key);
+              if (key === "add-contact") {
+                setScreen("add-contact");
+              } else {
+                setScreen("home");
+              }
+            }}
+            dark={dk}
+          />
+        )}
       </div>
     </div>
   );

@@ -685,17 +685,62 @@ function cleanStatusCaption(caption?: string) {
   return "";
 }
 
-function StatusViewScreen({ status, currentUser, onBack, dark, onDelete, onReply, showToast }: any) {
+function StatusViewScreen({
+  status,
+  statuses = [],
+  currentUser,
+  onBack,
+  dark,
+  onDelete,
+  onReply,
+  showToast,
+  onIndexChange
+}: any) {
+  // Ordered statuses list from Supabase/parent
+  const statusesList = useMemo(() => {
+    if (Array.isArray(statuses) && statuses.length > 0) {
+      if (status && !statuses.some((s: any) => String(s.id) === String(status.id))) {
+        return [status, ...statuses];
+      }
+      return statuses;
+    }
+    return status ? [status] : [];
+  }, [statuses, status]);
+
+  // Active post index in the ordered list
+  const initialIdx = useMemo(() => {
+    if (!status) return 0;
+    const found = statusesList.findIndex((s: any) => String(s.id) === String(status.id));
+    return found >= 0 ? found : 0;
+  }, [statusesList, status]);
+
+  const [currentIndex, setCurrentIndex] = useState(initialIdx);
+
+  // Sync if external status prop changes
+  useEffect(() => {
+    if (status) {
+      const found = statusesList.findIndex((s: any) => String(s.id) === String(status.id));
+      if (found >= 0 && found !== currentIndex) {
+        setCurrentIndex(found);
+      }
+    }
+  }, [status?.id]);
+
+  const currentStatus = statusesList[currentIndex] || status;
+
   const [isPlaying, setIsPlaying] = useState(true);
   const [isHolding, setIsHolding] = useState(false);
   const [progress, setProgress] = useState(0);
   const [mediaError, setMediaError] = useState(false);
-  const [viewers, setViewers] = useState<any[]>(status?.viewers || ["Alice", "Bob"]);
+  const [viewers, setViewers] = useState<any[]>(currentStatus?.viewers || ["Alice", "Bob"]);
   const [replyText, setReplyText] = useState("");
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   const [copiedCaption, setCopiedCaption] = useState(false);
   const [copiedMediaUrl, setCopiedMediaUrl] = useState(false);
+  const [centerFeedback, setCenterFeedback] = useState<"play" | "pause" | null>(null);
+  const [transitionClass, setTransitionClass] = useState<string>("");
+
   const [reactions, setReactions] = useState<Array<{
     id: string;
     emoji: string;
@@ -708,6 +753,9 @@ function StatusViewScreen({ status, currentUser, onBack, dark, onDelete, onReply
 
   const [timeRemaining, setTimeRemaining] = useState<string>("");
 
+  // Video element ref
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+
   // Pinch-to-zoom state for image status
   const [zoomScale, setZoomScale] = useState(1);
   const [zoomOffset, setZoomOffset] = useState({ x: 0, y: 0 });
@@ -718,10 +766,14 @@ function StatusViewScreen({ status, currentUser, onBack, dark, onDelete, onReply
   const initialOffsetRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const lastTapRef = useRef<number>(0);
 
-  useEffect(() => {
-    setZoomScale(1);
-    setZoomOffset({ x: 0, y: 0 });
-  }, [status]);
+  const isCreator = currentUser && currentStatus?.user_id === currentUser.id;
+  const isImage = (currentStatus?.media_type === "image" || (!currentStatus?.media_type && isMediaUrl(currentStatus?.media_url))) && !mediaError;
+  const isVideo = currentStatus?.media_type === "video" && !mediaError;
+  const isVoice = currentStatus?.media_type === "voice";
+  const isText = currentStatus?.media_type === "text";
+  const validMediaUrl = getValidMediaUrl(currentStatus?.media_url);
+  const cleanCaption = cleanStatusCaption(currentStatus?.caption);
+  const statusDeepLink = `${window.location.origin}${window.location.pathname}#status-${currentStatus?.id}`;
 
   const resetZoom = () => {
     setZoomScale(1);
@@ -729,6 +781,287 @@ function StatusViewScreen({ status, currentUser, onBack, dark, onDelete, onReply
     setIsHolding(false);
   };
 
+  // Reset transient state whenever current status changes
+  useEffect(() => {
+    setZoomScale(1);
+    setZoomOffset({ x: 0, y: 0 });
+    setProgress(0);
+    setMediaError(false);
+    setIsPlaying(true);
+    setIsHolding(false);
+    setViewers(currentStatus?.viewers || ["Alice", "Bob"]);
+  }, [currentStatus?.id]);
+
+  // Record view in Supabase & local storage
+  useEffect(() => {
+    if (!currentStatus?.id) return;
+    try {
+      const saved = localStorage.getItem("chatme_viewed_statuses");
+      const next = new Set(saved ? JSON.parse(saved) : []);
+      next.add(String(currentStatus.id));
+      localStorage.setItem("chatme_viewed_statuses", JSON.stringify(Array.from(next)));
+    } catch {}
+
+    const recordView = async () => {
+      try {
+        if (currentUser && currentStatus.id) {
+          await supabase.from("status_views").upsert({
+            status_id: currentStatus.id,
+            user_id: currentUser.id,
+            user_name: currentUser.fullname,
+            viewed_at: new Date().toISOString()
+          }, { onConflict: "status_id,user_id" });
+        }
+      } catch (e) {}
+    };
+    recordView();
+  }, [currentStatus?.id, currentUser]);
+
+  const triggerTransition = (direction: "next" | "prev") => {
+    setTransitionClass(direction === "next" ? "animate-status-next" : "animate-status-prev");
+    setTimeout(() => {
+      setTransitionClass("");
+    }, 240);
+  };
+
+  // Navigation handlers
+  const goToPrevPost = () => {
+    if (currentIndex > 0) {
+      triggerTransition("prev");
+      const nextIdx = currentIndex - 1;
+      setCurrentIndex(nextIdx);
+      setProgress(0);
+      setMediaError(false);
+      resetZoom();
+      if (onIndexChange) onIndexChange(nextIdx, statusesList[nextIdx]);
+    } else {
+      // Index 0: Left tap keeps on first post and rewinds progress, no error
+      setProgress(0);
+      resetZoom();
+      if (videoRef.current) {
+        try { videoRef.current.currentTime = 0; } catch {}
+      }
+    }
+  };
+
+  const goToNextPost = () => {
+    if (currentIndex < statusesList.length - 1) {
+      triggerTransition("next");
+      const nextIdx = currentIndex + 1;
+      setCurrentIndex(nextIdx);
+      setProgress(0);
+      setMediaError(false);
+      resetZoom();
+      if (onIndexChange) onIndexChange(nextIdx, statusesList[nextIdx]);
+    } else {
+      // Final post: Right tap closes viewer without error
+      onBack();
+    }
+  };
+
+  // Keyboard accessibility: ArrowLeft, ArrowRight, Escape (Requirement 12)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (isShareModalOpen) {
+        if (e.key === "Escape") {
+          setIsShareModalOpen(false);
+          setIsHolding(false);
+        }
+        return;
+      }
+      const activeEl = document.activeElement;
+      if (activeEl && (activeEl.tagName === "INPUT" || activeEl.tagName === "TEXTAREA")) {
+        if (e.key === "Escape") {
+          (activeEl as HTMLElement).blur();
+        }
+        return;
+      }
+
+      if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        goToPrevPost();
+      } else if (e.key === "ArrowRight") {
+        e.preventDefault();
+        goToNextPost();
+      } else if (e.key === "Escape") {
+        e.preventDefault();
+        onBack();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isShareModalOpen, currentIndex, statusesList.length]);
+
+  // Video playback synchronization
+  useEffect(() => {
+    if (videoRef.current && isVideo) {
+      if (isPlaying && !isHolding && !isShareModalOpen) {
+        videoRef.current.play().catch(() => {});
+      } else {
+        videoRef.current.pause();
+      }
+    }
+  }, [isPlaying, isHolding, isShareModalOpen, isVideo, currentIndex]);
+
+  const handleVideoTimeUpdate = () => {
+    if (videoRef.current && isVideo) {
+      const { currentTime, duration } = videoRef.current;
+      if (duration && duration > 0 && !isNaN(duration)) {
+        setProgress(Math.min(100, (currentTime / duration) * 100));
+      }
+    }
+  };
+
+  const handleVideoEnded = () => {
+    goToNextPost();
+  };
+
+  // Non-video timer progress bar
+  useEffect(() => {
+    let timer: any;
+    if (!isVideo) {
+      if (isPlaying && !isHolding && !isShareModalOpen) {
+        timer = setInterval(() => {
+          setProgress((p) => {
+            if (p >= 100) {
+              clearInterval(timer);
+              goToNextPost();
+              return 0;
+            }
+            return p + 2;
+          });
+        }, 100);
+      }
+    }
+    return () => clearInterval(timer);
+  }, [isPlaying, isHolding, isShareModalOpen, isVideo, currentIndex, statusesList.length]);
+
+  // Touch gesture & tap handling: distinguishes tap from swipe/drag (Requirement 1, 4, 7)
+  const touchStartRef = useRef<{ x: number; y: number; time: number; zone: "left" | "center" | "right" } | null>(null);
+  const isDraggingRef = useRef<boolean>(false);
+  const lastTouchTimeRef = useRef<number>(0);
+
+  const handleZoneTouchStart = (e: React.TouchEvent, zone: "left" | "center" | "right") => {
+    if (isShareModalOpen) return;
+    if (e.touches.length > 1) {
+      isDraggingRef.current = true;
+      return;
+    }
+    const touch = e.touches[0];
+    touchStartRef.current = { x: touch.clientX, y: touch.clientY, time: Date.now(), zone };
+    isDraggingRef.current = false;
+    lastTouchTimeRef.current = Date.now();
+    setIsHolding(true);
+  };
+
+  const handleZoneTouchMove = (e: React.TouchEvent) => {
+    if (!touchStartRef.current) return;
+    const touch = e.touches[0];
+    const dx = Math.abs(touch.clientX - touchStartRef.current.x);
+    const dy = Math.abs(touch.clientY - touchStartRef.current.y);
+    if (dx > 12 || dy > 12) {
+      isDraggingRef.current = true;
+    }
+  };
+
+  const handleZoneTouchEnd = (e: React.TouchEvent, zone: "left" | "center" | "right") => {
+    lastTouchTimeRef.current = Date.now();
+    setIsHolding(false);
+    const start = touchStartRef.current;
+    touchStartRef.current = null;
+
+    if (!start) return;
+
+    // Distinguish a tap from a swipe or scroll drag (Requirement 4)
+    if (isDraggingRef.current) return;
+
+    // Long press hold (> 400ms) pauses status, not a tap
+    const duration = Date.now() - start.time;
+    if (duration > 400) return;
+
+    // If zoomed in on image, don't change posts
+    if (zoomScale > 1.05) return;
+
+    // Execute tap action
+    if (zone === "left") {
+      goToPrevPost();
+    } else if (zone === "right") {
+      goToNextPost();
+    } else if (zone === "center") {
+      // Center 30%: do not change posts (Requirement 1 & 7)
+      if (isVideo && videoRef.current) {
+        if (videoRef.current.paused) {
+          videoRef.current.play().catch(() => {});
+          setIsPlaying(true);
+          setCenterFeedback("play");
+        } else {
+          videoRef.current.pause();
+          setIsPlaying(false);
+          setCenterFeedback("pause");
+        }
+        setTimeout(() => setCenterFeedback(null), 600);
+      }
+    }
+  };
+
+  // Mouse gestures for desktop preview
+  const mouseStartRef = useRef<{ x: number; y: number; time: number; zone: "left" | "center" | "right" } | null>(null);
+
+  const handleZoneMouseDown = (e: React.MouseEvent, zone: "left" | "center" | "right") => {
+    if (Date.now() - lastTouchTimeRef.current < 600) return;
+    if (e.button !== 0) return;
+    if (isShareModalOpen) return;
+    mouseStartRef.current = { x: e.clientX, y: e.clientY, time: Date.now(), zone };
+    isDraggingRef.current = false;
+    setIsHolding(true);
+  };
+
+  const handleZoneMouseMove = (e: React.MouseEvent) => {
+    if (!mouseStartRef.current) return;
+    const dx = Math.abs(e.clientX - mouseStartRef.current.x);
+    const dy = Math.abs(e.clientY - mouseStartRef.current.y);
+    if (dx > 12 || dy > 12) {
+      isDraggingRef.current = true;
+    }
+  };
+
+  const handleZoneMouseUp = (e: React.MouseEvent, zone: "left" | "center" | "right") => {
+    if (Date.now() - lastTouchTimeRef.current < 600) return;
+    setIsHolding(false);
+    const start = mouseStartRef.current;
+    mouseStartRef.current = null;
+
+    if (!start) return;
+    if (isDraggingRef.current) return;
+
+    const duration = Date.now() - start.time;
+    if (duration > 400) return;
+
+    if (zoomScale > 1.05) return;
+
+    if (zone === "left") {
+      goToPrevPost();
+    } else if (zone === "right") {
+      goToNextPost();
+    } else if (zone === "center") {
+      // Center 30%: do not change posts
+      if (isVideo && videoRef.current) {
+        if (videoRef.current.paused) {
+          videoRef.current.play().catch(() => {});
+          setIsPlaying(true);
+          setCenterFeedback("play");
+        } else {
+          videoRef.current.pause();
+          setIsPlaying(false);
+          setCenterFeedback("pause");
+        }
+        setTimeout(() => setCenterFeedback(null), 600);
+      }
+    }
+  };
+
+  // Pinch-to-zoom handlers for images
   const handlePinchTouchStart = (e: React.TouchEvent) => {
     if (e.touches.length === 2) {
       const d = Math.hypot(
@@ -796,10 +1129,11 @@ function StatusViewScreen({ status, currentUser, onBack, dark, onDelete, onReply
     }
   };
 
+  // 24h countdown
   useEffect(() => {
     const updateCountdown = () => {
-      const createdAtMs = status?.created_at ? new Date(status.created_at).getTime() : Date.now();
-      const expiresAtMs = status?.expires_at ? new Date(status.expires_at).getTime() : createdAtMs + 24 * 60 * 60 * 1000;
+      const createdAtMs = currentStatus?.created_at ? new Date(currentStatus.created_at).getTime() : Date.now();
+      const expiresAtMs = currentStatus?.expires_at ? new Date(currentStatus.expires_at).getTime() : createdAtMs + 24 * 60 * 60 * 1000;
       const diffMs = expiresAtMs - Date.now();
 
       if (diffMs <= 0) {
@@ -823,7 +1157,7 @@ function StatusViewScreen({ status, currentUser, onBack, dark, onDelete, onReply
     updateCountdown();
     const interval = setInterval(updateCountdown, 1000);
     return () => clearInterval(interval);
-  }, [status]);
+  }, [currentStatus]);
 
   const triggerReaction = (emoji: string) => {
     const newParticles = Array.from({ length: 14 }).map((_, i) => ({
@@ -838,8 +1172,8 @@ function StatusViewScreen({ status, currentUser, onBack, dark, onDelete, onReply
 
     setReactions((prev) => [...prev, ...newParticles]);
 
-    if (onReply) {
-      onReply(status.user_id, emoji);
+    if (onReply && currentStatus?.user_id) {
+      onReply(currentStatus.user_id, emoji);
     }
 
     setTimeout(() => {
@@ -847,67 +1181,11 @@ function StatusViewScreen({ status, currentUser, onBack, dark, onDelete, onReply
     }, 3200);
   };
 
-  if (!status) {
-    return (
-      <div className="flex flex-col h-full bg-gray-950 text-white items-center justify-center p-6 text-center gap-4">
-        <p className="text-gray-400 text-sm">Status update unavailable.</p>
-        <button onClick={onBack} className="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-sm font-semibold transition-all">
-          Back to Updates
-        </button>
-      </div>
-    );
-  }
-
-  useEffect(() => {
-    // Record view in supabase if available
-    const recordView = async () => {
-      try {
-        if (currentUser && status.id) {
-          await supabase.from("status_views").upsert({
-            status_id: status.id,
-            user_id: currentUser.id,
-            user_name: currentUser.fullname,
-            viewed_at: new Date().toISOString()
-          }, { onConflict: 'status_id,user_id' });
-        }
-      } catch (e) {
-        // Fallback local
-      }
-    };
-    recordView();
-  }, [status, currentUser]);
-
-  useEffect(() => {
-    let timer: any;
-    if (isPlaying && !isHolding && !isShareModalOpen) {
-      timer = setInterval(() => {
-        setProgress((p) => {
-          if (p >= 100) {
-            clearInterval(timer);
-            setTimeout(() => onBack(), 0);
-            return 100;
-          }
-          return p + 2;
-        });
-      }, 100);
-    }
-    return () => clearInterval(timer);
-  }, [isPlaying, isHolding, isShareModalOpen, onBack]);
-
-  const isCreator = currentUser && status.user_id === currentUser.id;
-  const isImage = (status.media_type === "image" || (!status.media_type && isMediaUrl(status.media_url))) && !mediaError;
-  const isVideo = status.media_type === "video" && !mediaError;
-  const isVoice = status.media_type === "voice";
-  const isText = status.media_type === "text";
-  const validMediaUrl = getValidMediaUrl(status.media_url);
-  const cleanCaption = cleanStatusCaption(status.caption);
-  const statusDeepLink = `${window.location.origin}${window.location.pathname}#status-${status.id}`;
-
   const handleShareClick = async (e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     setIsHolding(true);
 
-    const authorName = status.user_name || "ChatMe User";
+    const authorName = currentStatus?.user_name || "ChatMe User";
     let shareTitle = `ChatMe Status from ${authorName}`;
     let shareText = cleanCaption ? `"${cleanCaption}" — ${authorName} on ChatMe` : `Check out ${authorName}'s status update on ChatMe!`;
 
@@ -922,7 +1200,7 @@ function StatusViewScreen({ status, currentUser, onBack, dark, onDelete, onReply
       shareText = `🎙️ Listen to ${authorName}'s voice status update on ChatMe!`;
     } else if (isText) {
       shareTitle = `Status by ${authorName}`;
-      shareText = `💬 "${cleanCaption || 'Status'}" — ${authorName} on ChatMe`;
+      shareText = `💬 "${cleanCaption || "Status"}" — ${authorName} on ChatMe`;
     }
 
     if (typeof navigator !== "undefined" && navigator.share) {
@@ -943,7 +1221,6 @@ function StatusViewScreen({ status, currentUser, onBack, dark, onDelete, onReply
       }
     }
 
-    // Fallback: Copy link & open share options modal
     try {
       if (navigator.clipboard) {
         await navigator.clipboard.writeText(statusDeepLink);
@@ -1004,7 +1281,7 @@ function StatusViewScreen({ status, currentUser, onBack, dark, onDelete, onReply
     if (!validMediaUrl) return;
     const a = document.createElement("a");
     a.href = validMediaUrl;
-    a.download = `chatme_status_${status.id}.${isVideo ? "mp4" : "jpg"}`;
+    a.download = `chatme_status_${currentStatus.id}.${isVideo ? "mp4" : "jpg"}`;
     a.target = "_blank";
     a.rel = "noopener noreferrer";
     document.body.appendChild(a);
@@ -1013,17 +1290,21 @@ function StatusViewScreen({ status, currentUser, onBack, dark, onDelete, onReply
     if (showToast) showToast("Starting media download / open...");
   };
 
+  if (!currentStatus) {
+    return (
+      <div className="flex flex-col h-full bg-gray-950 text-white items-center justify-center p-6 text-center gap-4">
+        <p className="text-gray-400 text-sm">Status update unavailable.</p>
+        <button onClick={onBack} className="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-sm font-semibold transition-all">
+          Back to Updates
+        </button>
+      </div>
+    );
+  }
+
   return (
-    <div 
-      className="flex flex-col h-full w-full bg-black text-white relative select-none overflow-hidden"
-      onMouseDown={() => { if (!isShareModalOpen) setIsHolding(true); }}
-      onMouseUp={() => { if (!isShareModalOpen) setIsHolding(false); }}
-      onMouseLeave={() => { if (!isShareModalOpen) setIsHolding(false); }}
-      onTouchStart={() => { if (!isShareModalOpen) setIsHolding(true); }}
-      onTouchEnd={() => { if (!isShareModalOpen) setIsHolding(false); }}
-    >
+    <div className="flex flex-col h-full w-full bg-black text-white relative select-none overflow-hidden">
       {/* Floating Emoji Reactions Overlay */}
-      <div className="absolute inset-0 pointer-events-none z-30 overflow-hidden">
+      <div className="absolute inset-0 pointer-events-none z-20 overflow-hidden">
         {reactions.map((r) => (
           <div
             key={r.id}
@@ -1041,26 +1322,51 @@ function StatusViewScreen({ status, currentUser, onBack, dark, onDelete, onReply
         ))}
       </div>
 
-      {/* Top progress bars */}
-      <div className="flex gap-1 p-2 pt-[max(0.5rem,env(safe-area-inset-top))]">
-        <div className="flex-1 h-1 bg-gray-600 rounded-full overflow-hidden">
-          <div className="h-full bg-white transition-all duration-100" style={{ width: `${progress}%` }} />
-        </div>
+      {/* Top segmented progress bars for stories */}
+      <div className="flex gap-1.5 p-2 pt-[max(0.5rem,env(safe-area-inset-top))] z-30">
+        {statusesList.map((s: any, idx: number) => {
+          let segWidth = 0;
+          if (idx < currentIndex) {
+            segWidth = 100;
+          } else if (idx === currentIndex) {
+            segWidth = progress;
+          } else {
+            segWidth = 0;
+          }
+          return (
+            <div key={s.id || idx} className="flex-1 h-1 bg-white/25 rounded-full overflow-hidden">
+              <div
+                className={`h-full bg-white ${idx === currentIndex ? "transition-all duration-100 ease-linear" : ""}`}
+                style={{ width: `${segWidth}%` }}
+              />
+            </div>
+          );
+        })}
       </div>
 
       {/* Header */}
-      <div className="flex justify-between items-center px-4 py-2 bg-gradient-to-b from-black/80 to-transparent z-10">
+      <div className="flex justify-between items-center px-4 py-2 bg-gradient-to-b from-black/80 to-transparent z-30">
         <div className="flex items-center gap-3 min-w-0">
-          <button onClick={onBack} className="text-white p-1 hover:opacity-80">
+          <button
+            onClick={onBack}
+            className="text-white p-1 hover:opacity-80 active:scale-95 transition cursor-pointer"
+            title="Back to updates"
+            aria-label="Back to updates"
+          >
             <ArrowLeft size={24} />
           </button>
           <div className="w-10 h-10 rounded-full overflow-hidden bg-gray-700 shrink-0">
-            <img src={status.user_photo || getDefaultAvatar(status.user_name)} alt="avatar" className="w-full h-full object-cover" onError={(e: any) => { e.target.src = getDefaultAvatar(status.user_name); }} />
+            <img
+              src={currentStatus.user_photo || getDefaultAvatar(currentStatus.user_name)}
+              alt="avatar"
+              className="w-full h-full object-cover"
+              onError={(e: any) => { e.target.src = getDefaultAvatar(currentStatus.user_name); }}
+            />
           </div>
           <div className="min-w-0 flex-1">
-            <p className="font-semibold text-sm truncate">{status.user_name || "Contact"}</p>
+            <p className="font-semibold text-sm truncate">{currentStatus.user_name || "Contact"}</p>
             <div className="flex items-center gap-2 text-xs text-gray-400">
-              <span>{new Date(status.created_at || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+              <span>{new Date(currentStatus.created_at || Date.now()).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
               <span>•</span>
               {timeRemaining && (
                 <span className="inline-flex items-center gap-1 text-emerald-400 font-medium bg-emerald-950/70 px-2 py-0.5 rounded-full border border-emerald-500/30 text-[11px] shadow-sm">
@@ -1071,6 +1377,7 @@ function StatusViewScreen({ status, currentUser, onBack, dark, onDelete, onReply
             </div>
           </div>
         </div>
+
         <div className="flex items-center gap-1 sm:gap-2 shrink-0">
           {/* Share Button */}
           <button
@@ -1081,120 +1388,205 @@ function StatusViewScreen({ status, currentUser, onBack, dark, onDelete, onReply
           >
             <Share2 size={20} />
           </button>
-          <button onClick={() => setIsPlaying(!isPlaying)} className="p-2 text-white hover:text-emerald-400 hover:bg-white/10 active:scale-95 rounded-full transition-all cursor-pointer">
+          <button
+            onClick={() => setIsPlaying(!isPlaying)}
+            className="p-2 text-white hover:text-emerald-400 hover:bg-white/10 active:scale-95 rounded-full transition-all cursor-pointer"
+            title={isPlaying ? "Pause status" : "Play status"}
+            aria-label={isPlaying ? "Pause status" : "Play status"}
+          >
             {isPlaying ? <Pause size={20} /> : <Play size={20} />}
           </button>
           {isCreator && (
-            <button onClick={() => { onDelete(status.id); onBack(); }} className="p-2 text-red-400 hover:bg-red-500/10 active:scale-95 rounded-full transition-all cursor-pointer">
+            <button
+              onClick={() => {
+                onDelete(currentStatus.id);
+                if (statusesList.length > 1) {
+                  goToNextPost();
+                } else {
+                  onBack();
+                }
+              }}
+              className="p-2 text-red-400 hover:bg-red-500/10 active:scale-95 rounded-full transition-all cursor-pointer"
+              title="Delete status"
+              aria-label="Delete status"
+            >
               <Trash2 size={20} />
             </button>
           )}
         </div>
       </div>
 
-      {/* Content Area */}
+      {/* Content Viewport Area */}
       <div className="flex-1 flex items-center justify-center p-4 relative overflow-hidden">
         {/* Background audio if present */}
-        {status.audio_url && (
-          <audio src={status.audio_url} autoPlay loop />
+        {currentStatus.audio_url && (
+          <audio src={currentStatus.audio_url} autoPlay loop />
         )}
 
-        {status.media_type === "image" || (isImage && !mediaError) ? (
-          <div
-            className="relative w-full h-full flex items-center justify-center overflow-hidden touch-none"
-            onTouchStart={handlePinchTouchStart}
-            onTouchMove={handlePinchTouchMove}
-            onTouchEnd={handlePinchTouchEnd}
-            onWheel={(e) => {
-              if (e.deltaY < 0) {
-                setZoomScale((s) => Math.min(4, s + 0.3));
-                setIsHolding(true);
-              } else {
-                setZoomScale((s) => {
-                  const next = Math.max(1, s - 0.3);
-                  if (next <= 1) {
-                    setZoomOffset({ x: 0, y: 0 });
-                    setIsHolding(false);
-                  }
-                  return next;
-                });
-              }
-            }}
-          >
-            <img
-              src={status.media_url}
-              alt="Status update"
-              onError={() => setMediaError(true)}
-              className="max-h-full max-w-full object-contain rounded-lg shadow-xl transition-transform duration-75 ease-out select-none cursor-grab active:cursor-grabbing"
-              style={{
-                transform: `translate3d(${zoomOffset.x}px, ${zoomOffset.y}px, 0) scale(${zoomScale})`,
-                transformOrigin: "center center",
+        {/* Media Container with smooth transition */}
+        <div className={`w-full h-full flex items-center justify-center relative select-none ${transitionClass}`}>
+          {currentStatus.media_type === "image" || (isImage && !mediaError) ? (
+            <div
+              className="relative w-full h-full flex items-center justify-center overflow-hidden touch-none"
+              onTouchStart={handlePinchTouchStart}
+              onTouchMove={handlePinchTouchMove}
+              onTouchEnd={handlePinchTouchEnd}
+              onWheel={(e) => {
+                if (e.deltaY < 0) {
+                  setZoomScale((s) => Math.min(4, s + 0.3));
+                  setIsHolding(true);
+                } else {
+                  setZoomScale((s) => {
+                    const next = Math.max(1, s - 0.3);
+                    if (next <= 1) {
+                      setZoomOffset({ x: 0, y: 0 });
+                      setIsHolding(false);
+                    }
+                    return next;
+                  });
+                }
               }}
-            />
-            {zoomScale > 1.05 && (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  resetZoom();
+            >
+              <img
+                src={validMediaUrl || currentStatus.media_url}
+                alt="Status update"
+                onError={() => setMediaError(true)}
+                className="max-h-full max-w-full object-contain rounded-lg shadow-xl transition-transform duration-75 ease-out select-none cursor-grab active:cursor-grabbing"
+                style={{
+                  transform: `translate3d(${zoomOffset.x}px, ${zoomOffset.y}px, 0) scale(${zoomScale})`,
+                  transformOrigin: "center center",
                 }}
-                className="absolute top-3 right-3 bg-black/80 hover:bg-black text-emerald-400 border border-emerald-500/40 text-xs font-semibold px-3 py-1.5 rounded-full shadow-2xl z-20 flex items-center gap-1.5 transition active:scale-95 cursor-pointer backdrop-blur-md"
-              >
-                <ZoomOut size={14} />
-                <span>{zoomScale.toFixed(1)}x • Reset</span>
-              </button>
-            )}
-          </div>
-        ) : status.media_type === "video" && status.media_url && !mediaError ? (
-          <video
-            src={status.media_url}
-            controls
-            autoPlay
-            onError={() => setMediaError(true)}
-            className="max-h-full max-w-full object-contain rounded-lg shadow-xl"
-          />
-        ) : status.media_type === "voice" ? (
-          <div className="flex flex-col items-center gap-4 bg-gray-900/80 p-8 rounded-2xl border border-gray-700 shadow-2xl">
-            <div className="w-20 h-20 bg-green-500 rounded-full flex items-center justify-center text-white animate-pulse">
-              <Mic size={36} />
+              />
+              {zoomScale > 1.05 && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    resetZoom();
+                  }}
+                  className="absolute top-3 right-3 bg-black/80 hover:bg-black text-emerald-400 border border-emerald-500/40 text-xs font-semibold px-3 py-1.5 rounded-full shadow-2xl z-40 flex items-center gap-1.5 transition active:scale-95 cursor-pointer backdrop-blur-md"
+                >
+                  <ZoomOut size={14} />
+                  <span>{zoomScale.toFixed(1)}x • Reset</span>
+                </button>
+              )}
             </div>
-            <p className="text-lg font-medium">Voice Status</p>
-            <audio src={status.media_url} controls className="w-64 max-w-full" />
-          </div>
-        ) : status.media_type === "text" ? (
-          <div className={`w-full max-w-md p-8 rounded-3xl text-center text-xl font-bold shadow-2xl border border-white/10 ${status.bg_color || "bg-gradient-to-br from-purple-600 to-indigo-800 text-white"}`}>
-            <p className="mb-2 leading-relaxed">{cleanCaption || "Status Update"}</p>
-            <span className="text-xs font-normal text-white/80 uppercase tracking-widest mt-2 block">ChatMe Status</span>
-          </div>
-        ) : (
-          <div className="w-full max-w-sm p-8 rounded-3xl bg-gradient-to-br from-emerald-950 via-gray-900 to-slate-950 border border-emerald-500/20 text-center flex flex-col items-center gap-3 shadow-2xl">
-            <div className="w-14 h-14 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 mb-1">
-              <Sparkles size={28} />
+          ) : currentStatus.media_type === "video" && currentStatus.media_url && !mediaError ? (
+            <video
+              ref={videoRef}
+              src={validMediaUrl || currentStatus.media_url}
+              playsInline
+              autoPlay
+              onTimeUpdate={handleVideoTimeUpdate}
+              onEnded={handleVideoEnded}
+              onError={() => setMediaError(true)}
+              className="max-h-full max-w-full object-contain rounded-lg shadow-xl select-none"
+            />
+          ) : currentStatus.media_type === "voice" ? (
+            <div className="flex flex-col items-center gap-4 bg-gray-900/80 p-8 rounded-2xl border border-gray-700 shadow-2xl">
+              <div className="w-20 h-20 bg-green-500 rounded-full flex items-center justify-center text-white animate-pulse">
+                <Mic size={36} />
+              </div>
+              <p className="text-lg font-medium">Voice Status</p>
+              <audio src={validMediaUrl || currentStatus.media_url} controls className="w-64 max-w-full" />
             </div>
-            <h4 className="text-lg font-bold text-white">ChatMe Status</h4>
-            <p className="text-sm text-gray-300 font-medium">{cleanCaption || "Status update"}</p>
-            <span className="text-[11px] text-emerald-400/70 uppercase tracking-widest mt-2">ChatMe Updates</span>
+          ) : currentStatus.media_type === "text" ? (
+            <div className={`w-full max-w-md p-8 rounded-3xl text-center text-xl font-bold shadow-2xl border border-white/10 ${currentStatus.bg_color || "bg-gradient-to-br from-purple-600 to-indigo-800 text-white"}`}>
+              <p className="mb-2 leading-relaxed">{cleanCaption || "Status Update"}</p>
+              <span className="text-xs font-normal text-white/80 uppercase tracking-widest mt-2 block">ChatMe Status</span>
+            </div>
+          ) : (
+            <div className="w-full max-w-sm p-8 rounded-3xl bg-gradient-to-br from-emerald-950 via-gray-900 to-slate-950 border border-emerald-500/20 text-center flex flex-col items-center gap-3 shadow-2xl">
+              <div className="w-14 h-14 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 mb-1">
+                <Sparkles size={28} />
+              </div>
+              <h4 className="text-lg font-bold text-white">ChatMe Status</h4>
+              <p className="text-sm text-gray-300 font-medium">{cleanCaption || "Status update"}</p>
+              <span className="text-[11px] text-emerald-400/70 uppercase tracking-widest mt-2">ChatMe Updates</span>
+            </div>
+          )}
+        </div>
+
+        {/* Center Feedback Indicator for Video Pause/Play */}
+        {centerFeedback && (
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-30">
+            <div className="w-16 h-16 rounded-full bg-black/70 backdrop-blur-md flex items-center justify-center text-white animate-scaleUp">
+              {centerFeedback === "play" ? <Play size={28} className="ml-1" /> : <Pause size={28} />}
+            </div>
           </div>
         )}
+
+        {/* Invisible Tap Navigation Zones (Left 35%, Center 30%, Right 35%) */}
+        {/* Requirements: Invisible zones, no large buttons, responsive on phone/tablet */}
+        <div
+          className={`absolute inset-0 z-20 flex select-none ${zoomScale > 1.05 ? "pointer-events-none" : "pointer-events-auto"}`}
+        >
+          {/* Left Zone: 35% -> Previous Post */}
+          <div
+            className="w-[35%] h-full bg-transparent cursor-pointer select-none"
+            style={{ WebkitTapHighlightColor: "transparent" }}
+            onTouchStart={(e) => handleZoneTouchStart(e, "left")}
+            onTouchMove={handleZoneTouchMove}
+            onTouchEnd={(e) => handleZoneTouchEnd(e, "left")}
+            onMouseDown={(e) => handleZoneMouseDown(e, "left")}
+            onMouseMove={handleZoneMouseMove}
+            onMouseUp={(e) => handleZoneMouseUp(e, "left")}
+            title="Previous post"
+            aria-label="Previous status post"
+            role="button"
+            tabIndex={-1}
+          />
+
+          {/* Center Zone: 30% -> Do not change posts (video play/pause) */}
+          <div
+            className="w-[30%] h-full bg-transparent select-none cursor-default"
+            style={{ WebkitTapHighlightColor: "transparent" }}
+            onTouchStart={(e) => handleZoneTouchStart(e, "center")}
+            onTouchMove={handleZoneTouchMove}
+            onTouchEnd={(e) => handleZoneTouchEnd(e, "center")}
+            onMouseDown={(e) => handleZoneMouseDown(e, "center")}
+            onMouseMove={handleZoneMouseMove}
+            onMouseUp={(e) => handleZoneMouseUp(e, "center")}
+            title="Status center"
+            aria-label="Status center"
+            role="presentation"
+          />
+
+          {/* Right Zone: 35% -> Next Post */}
+          <div
+            className="w-[35%] h-full bg-transparent cursor-pointer select-none"
+            style={{ WebkitTapHighlightColor: "transparent" }}
+            onTouchStart={(e) => handleZoneTouchStart(e, "right")}
+            onTouchMove={handleZoneTouchMove}
+            onTouchEnd={(e) => handleZoneTouchEnd(e, "right")}
+            onMouseDown={(e) => handleZoneMouseDown(e, "right")}
+            onMouseMove={handleZoneMouseMove}
+            onMouseUp={(e) => handleZoneMouseUp(e, "right")}
+            title="Next post"
+            aria-label="Next status post"
+            role="button"
+            tabIndex={-1}
+          />
+        </div>
       </div>
 
       {/* Music tag if present */}
-      {status.music_track && (
-        <div className="px-4 py-1.5 bg-black/70 text-green-400 text-xs font-semibold flex items-center justify-center gap-2 border-t border-gray-800">
+      {currentStatus.music_track && (
+        <div className="px-4 py-1.5 bg-black/70 text-green-400 text-xs font-semibold flex items-center justify-center gap-2 border-t border-gray-800 z-30">
           <Sparkles size={14} className="animate-pulse" />
-          <span>{status.music_track}</span>
+          <span>{currentStatus.music_track}</span>
         </div>
       )}
 
       {/* Caption if any */}
-      {status.media_type !== "text" && cleanCaption && !mediaError && (
-        <div className="p-4 text-center bg-black/60 text-sm font-medium">
+      {currentStatus.media_type !== "text" && cleanCaption && !mediaError && (
+        <div className="p-4 text-center bg-black/60 text-sm font-medium z-30">
           {cleanCaption}
         </div>
       )}
 
       {/* Quick Emoji Reaction Bar */}
       <div 
-        className="flex items-center justify-center gap-1.5 px-3 py-1.5 bg-black/60 backdrop-blur-md rounded-full border border-white/10 mx-auto mb-2 shadow-2xl z-20"
+        className="flex items-center justify-center gap-1.5 px-3 py-1.5 bg-black/60 backdrop-blur-md rounded-full border border-white/10 mx-auto mb-2 shadow-2xl z-30"
         onMouseDown={(e) => e.stopPropagation()}
         onMouseUp={(e) => e.stopPropagation()}
         onTouchStart={(e) => e.stopPropagation()}
@@ -1214,7 +1606,7 @@ function StatusViewScreen({ status, currentUser, onBack, dark, onDelete, onReply
 
       {/* Viewers bar for creator */}
       {isCreator && (
-        <div className="p-4 bg-gray-900 border-t border-gray-800 flex items-center justify-between z-20">
+        <div className="p-4 bg-gray-900 border-t border-gray-800 flex items-center justify-between z-30">
           <div className="flex items-center gap-2">
             <Eye size={18} className="text-gray-400" />
             <span className="text-sm font-medium">{viewers.length} views</span>
@@ -1222,7 +1614,7 @@ function StatusViewScreen({ status, currentUser, onBack, dark, onDelete, onReply
           <div className="flex -space-x-2 overflow-hidden">
             {viewers.map((v, i) => (
               <div key={i} className="inline-block h-7 w-7 rounded-full ring-2 ring-gray-900 bg-gray-700 flex items-center justify-center text-xs text-white font-bold">
-                {typeof v === 'string' ? v[0] : (v.user_name?.[0] || 'U')}
+                {typeof v === "string" ? v[0] : (v.user_name?.[0] || "U")}
               </div>
             ))}
           </div>
@@ -1232,7 +1624,7 @@ function StatusViewScreen({ status, currentUser, onBack, dark, onDelete, onReply
       {/* Reply bar for viewers */}
       {!isCreator && (
         <div 
-          className="p-3 bg-black/80 backdrop-blur-md flex items-center gap-2 z-20"
+          className="p-3 bg-black/80 backdrop-blur-md flex items-center gap-2 z-30"
           onMouseDown={(e) => e.stopPropagation()}
           onMouseUp={(e) => e.stopPropagation()}
           onTouchStart={(e) => e.stopPropagation()}
@@ -1243,10 +1635,10 @@ function StatusViewScreen({ status, currentUser, onBack, dark, onDelete, onReply
             value={replyText}
             onChange={(e) => setReplyText(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === 'Enter' && replyText.trim()) {
+              if (e.key === "Enter" && replyText.trim()) {
                 const text = replyText.trim();
                 triggerReaction(text.match(/[\p{Emoji_Presentation}\p{Extended_Pictographic}]/u)?.[0] || "❤️");
-                onReply(status.user_id, text);
+                onReply(currentStatus.user_id, text);
                 setReplyText("");
               }
             }}
@@ -1265,7 +1657,7 @@ function StatusViewScreen({ status, currentUser, onBack, dark, onDelete, onReply
               if (replyText.trim()) {
                 const text = replyText.trim();
                 triggerReaction(text.match(/[\p{Emoji_Presentation}\p{Extended_Pictographic}]/u)?.[0] || "❤️");
-                onReply(status.user_id, text);
+                onReply(currentStatus.user_id, text);
                 setReplyText("");
               }
             }}
@@ -1291,16 +1683,16 @@ function StatusViewScreen({ status, currentUser, onBack, dark, onDelete, onReply
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-full overflow-hidden bg-gray-800 border border-emerald-500/40">
                   <img 
-                    src={status.user_photo || getDefaultAvatar(status.user_name)} 
+                    src={currentStatus.user_photo || getDefaultAvatar(currentStatus.user_name)} 
                     alt="Author" 
                     className="w-full h-full object-cover" 
-                    onError={(e: any) => { e.target.src = getDefaultAvatar(status.user_name); }} 
+                    onError={(e: any) => { e.target.src = getDefaultAvatar(currentStatus.user_name); }} 
                   />
                 </div>
                 <div>
                   <h3 className="text-sm font-bold text-white leading-tight">Share Status Update</h3>
                   <div className="flex items-center gap-1.5 mt-0.5">
-                    <span className="text-xs text-gray-400">by {status.user_name || "Contact"}</span>
+                    <span className="text-xs text-gray-400">by {currentStatus.user_name || "Contact"}</span>
                     <span className="text-[10px] px-1.5 py-0.2 rounded-full font-semibold uppercase bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
                       {isVideo ? "Video" : isImage ? "Photo" : isVoice ? "Voice" : "Text"}
                     </span>
@@ -1329,7 +1721,7 @@ function StatusViewScreen({ status, currentUser, onBack, dark, onDelete, onReply
                   <Mic size={20} className="text-red-400" />
                 </div>
               ) : (
-                <div className={`w-12 h-12 rounded-xl ${status.bg_color || "bg-emerald-600"} flex items-center justify-center shrink-0 text-white font-bold text-xs`}>
+                <div className={`w-12 h-12 rounded-xl ${currentStatus.bg_color || "bg-emerald-600"} flex items-center justify-center shrink-0 text-white font-bold text-xs`}>
                   Aa
                 </div>
               )}
@@ -1358,14 +1750,14 @@ function StatusViewScreen({ status, currentUser, onBack, dark, onDelete, onReply
                   {copiedLink ? <Check size={18} className="stroke-[2.5]" /> : <Copy size={18} />}
                   <span>{copiedLink ? "Status Link Copied!" : "Copy Status Deep Link"}</span>
                 </div>
-                <span className="text-xs font-normal opacity-90">#status-{status.id}</span>
+                <span className="text-xs font-normal opacity-90">#status-{currentStatus.id}</span>
               </button>
 
               {/* Share via Apps (Native Sheet) */}
               {typeof navigator !== "undefined" && (
                 <button
                   onClick={async () => {
-                    const authorName = status.user_name || "ChatMe User";
+                    const authorName = currentStatus.user_name || "ChatMe User";
                     const title = `ChatMe Status from ${authorName}`;
                     const text = cleanCaption ? `"${cleanCaption}" — ${authorName} on ChatMe` : `Check out this status on ChatMe!`;
                     if (navigator.share) {
@@ -1400,13 +1792,13 @@ function StatusViewScreen({ status, currentUser, onBack, dark, onDelete, onReply
                     onClick={handleDownloadMedia}
                     className="py-2.5 px-3 bg-gray-800/80 hover:bg-gray-700/80 text-gray-200 rounded-xl text-xs font-medium flex items-center justify-center gap-2 transition cursor-pointer border border-gray-700/50"
                   >
-                    <Download size={15} className="text-teal-400" />
-                    <span>Download / Open</span>
+                    <Download size={15} className="text-emerald-400" />
+                    <span>Download Media</span>
                   </button>
                 </div>
               )}
 
-              {/* Copy Caption if available */}
+              {/* Copy Caption */}
               {cleanCaption && (
                 <button
                   onClick={copyCaption}
@@ -1665,7 +2057,7 @@ function UpdatesScreen({ dark, currentUser, statuses, onAddStatus, onViewStatus,
     if (e.target) e.target.value = "";
   };
 
-  const handleStatusClick = (statusItem: any) => {
+  const handleStatusClick = (statusItem: any, listOverride?: any[]) => {
     if (statusItem?.id) {
       setViewedStatusIds(prev => {
         const next = new Set(prev);
@@ -1676,7 +2068,8 @@ function UpdatesScreen({ dark, currentUser, statuses, onAddStatus, onViewStatus,
         return next;
       });
     }
-    onViewStatus(statusItem);
+    const targetList = listOverride || activeStatusList;
+    onViewStatus(statusItem, targetList);
   };
 
   // Channels state
@@ -6253,7 +6646,23 @@ export default function App() {
   } else if (screen.startsWith("statusView:")) {
     const statusId = screen.split(":")[1];
     const targetStatus = statuses.find(s => String(s.id) === String(statusId)) || statuses[0];
-    body = <StatusViewScreen status={targetStatus} currentUser={currentUser} onBack={() => { setScreen("home"); setActiveTab("updates"); }} dark={dk} onDelete={handleDeleteStatus} onReply={handleReplyStatus} showToast={showToast} />;
+    body = (
+      <StatusViewScreen
+        status={targetStatus}
+        statuses={statuses}
+        currentUser={currentUser}
+        onBack={() => { setScreen("home"); setActiveTab("updates"); }}
+        dark={dk}
+        onDelete={handleDeleteStatus}
+        onReply={handleReplyStatus}
+        showToast={showToast}
+        onIndexChange={(newIdx: number, newStatus: any) => {
+          if (newStatus?.id) {
+            window.history.replaceState(null, "", `#status-${newStatus.id}`);
+          }
+        }}
+      />
+    );
   } else if (currentUser) {
     // main tabbed area
     let tabBody = null;
@@ -6281,7 +6690,22 @@ export default function App() {
         />
       );
     else if (activeTab === "updates")
-      tabBody = <UpdatesScreen dark={dk} currentUser={currentUser} statuses={statuses} onAddStatus={handleAddStatus} onViewStatus={(s) => setScreen("statusView:" + s.id)} onDeleteStatus={handleDeleteStatus} onUpdateStatuses={setStatuses} />;
+      tabBody = (
+        <UpdatesScreen
+          dark={dk}
+          currentUser={currentUser}
+          statuses={statuses}
+          onAddStatus={handleAddStatus}
+          onViewStatus={(s: any, list?: any[]) => {
+            if (list && Array.isArray(list) && list.length > 0) {
+              setStatuses(list);
+            }
+            setScreen("statusView:" + s.id);
+          }}
+          onDeleteStatus={handleDeleteStatus}
+          onUpdateStatuses={setStatuses}
+        />
+      );
     else if (activeTab === "add-contact")
       tabBody = (
         <AddContactScreen

@@ -1,6 +1,6 @@
 import express from "express";
 import path from "path";
-import { createServer as createViteServer } from "vite";
+import fs from "fs";
 import { createClient } from "@supabase/supabase-js";
 import { GoogleGenAI } from "@google/genai";
 
@@ -661,27 +661,55 @@ async function startServer() {
     }
   });
 
+  // Cloud Run / container health check endpoints
+  app.get(["/healthz", "/api/health", "/_health"], (_req, res) => {
+    res.status(200).send("OK");
+  });
+  app.head(["/healthz", "/api/health", "/_health"], (_req, res) => {
+    res.status(200).end();
+  });
+
   // Vite middleware for development vs static serving in production
-  if (process.env.NODE_ENV !== "production") {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: "spa",
-    });
-    app.use(vite.middlewares);
+  const distPath = path.join(process.cwd(), "dist");
+  const hasDist = fs.existsSync(path.join(distPath, "index.html"));
+  const isProduction = process.env.NODE_ENV === "production" || hasDist;
+
+  if (!isProduction) {
+    try {
+      const { createServer: createViteServer } = await import("vite");
+      const vite = await createViteServer({
+        server: { middlewareMode: true },
+        appType: "spa",
+      });
+      app.use(vite.middlewares);
+    } catch (e) {
+      console.warn("[server.ts] Could not load Vite dev server, falling back to static files:", e);
+      app.use(express.static(distPath));
+    }
   } else {
-    const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
     app.use((req, res, next) => {
-      if (req.method === 'GET' && !req.path.startsWith('/api')) {
-        return res.sendFile(path.join(distPath, 'index.html'));
+      if ((req.method === "GET" || req.method === "HEAD") && !req.path.startsWith("/api")) {
+        return res.sendFile(path.join(distPath, "index.html"));
       }
       next();
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on port ${PORT}`);
+  const server = app.listen(PORT, "0.0.0.0", () => {
+    console.log(`Server running on port ${PORT} (mode: ${isProduction ? "production" : "development"})`);
   });
+
+  const handleShutdown = (signal: string) => {
+    console.log(`[server.ts] ${signal} signal received: closing HTTP server`);
+    server.close(() => {
+      console.log("[server.ts] HTTP server closed");
+      process.exit(0);
+    });
+  };
+
+  process.on("SIGTERM", () => handleShutdown("SIGTERM"));
+  process.on("SIGINT", () => handleShutdown("SIGINT"));
 }
 
 startServer();
